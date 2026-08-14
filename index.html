@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Trial Calendar</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#2e5e2e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Trial Calendar">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, Segoe UI, Roboto, sans-serif; background:#f4f6f2; margin:0; padding:0; color:#1f2a1f; }
+  h1 { font-size:1.25em; margin:0; }
+  .header { padding:14px 16px 10px; }
+  .sub { color:#556; font-size:0.82em; margin-top:2px; }
+
+  .tabs { display:flex; position:sticky; top:0; background:#f4f6f2; z-index:10; border-bottom:2px solid #dde3d9; padding:0 8px; }
+  .tab-btn { flex:1; text-align:center; padding:12px 4px; font-size:0.88em; font-weight:600; color:#789; background:none; border:none; border-bottom:3px solid transparent; cursor:pointer; }
+  .tab-btn.active { color:#2e5e2e; border-bottom:3px solid #2e5e2e; }
+
+  .panel { display:none; padding:14px 16px 24px; }
+  .panel.active { display:block; }
+
+  .card { background:#fff; border-radius:10px; padding:14px; box-shadow:0 1px 4px rgba(0,0,0,0.08); margin-bottom:14px; }
+  .field { margin-bottom:12px; }
+  .field:last-child { margin-bottom:0; }
+  .field label { font-weight:600; font-size:0.85em; display:block; margin-bottom:6px; }
+  .field input[type=text], .field input[type=date], .field select {
+    font-size:1em; padding:9px; border-radius:6px; border:1px solid #ccc; width:100%; background:#fff; color:#1f2a1f;
+  }
+
+  table { width:100%; border-collapse:collapse; background:#fff; border-radius:10px; overflow:hidden; box-shadow:0 1px 4px rgba(0,0,0,0.08); }
+  th, td { text-align:left; padding:10px 8px; font-size:0.86em; border-bottom:1px solid #eee; }
+  th { background:#2e5e2e; color:#fff; font-weight:600; }
+  tr:last-child td { border-bottom:none; }
+  .dat { font-weight:700; color:#2e5e2e; white-space:nowrap; }
+  .date { white-space:nowrap; font-variant-numeric: tabular-nums; }
+  .cat-fert { border-left:4px solid #4a8f4a; }
+  .cat-pest { border-left:4px solid #c0562e; }
+  .cat-assess { border-left:4px solid #3a6ea5; }
+  .tag { display:inline-block; font-size:0.7em; padding:2px 6px; border-radius:4px; margin-left:6px; font-weight:600; white-space:nowrap; }
+  .tag-fert { background:#e3f1e3; color:#2e5e2e; }
+  .tag-pest { background:#fbe6dd; color:#a3441d; }
+  .tag-assess { background:#e2ecf7; color:#2a5580; }
+  .note { font-size:0.78em; color:#667; margin-top:2px; }
+  .today-row { outline:2px solid #d9a441; outline-offset:-2px; }
+  .chk-cell { text-align:center; width:34px; }
+  .chk-cell input { width:19px; height:19px; cursor:pointer; }
+  tr.done td { opacity:0.45; }
+  tr.done .title-text { text-decoration: line-through; }
+  .progress { font-size:0.8em; color:#556; margin:8px 2px 4px; text-align:right; }
+
+  .app-row { display:flex; gap:10px; align-items:flex-end; margin-bottom:10px; flex-wrap:wrap; }
+  .app-row .field { flex:1; min-width:140px; margin-bottom:0; }
+  .app-block { border:1px solid #e3e8df; border-radius:8px; padding:12px; margin-bottom:12px; }
+  .app-block h3 { margin:0 0 10px; font-size:0.95em; color:#2e5e2e; }
+  .remove-btn { background:#fbe6dd; color:#a3441d; border:none; border-radius:6px; padding:8px 10px; font-size:0.8em; font-weight:600; cursor:pointer; }
+  .add-btn { display:block; width:100%; background:#2e5e2e; color:#fff; border:none; border-radius:8px; padding:12px; font-size:0.9em; font-weight:600; cursor:pointer; margin-top:6px; }
+  .assess-note { font-size:0.78em; color:#667; margin-top:4px; }
+
+  footer { font-size:0.72em; color:#889; margin-top:14px; text-align:center; padding: 0 16px 20px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>🌾 Trial Calendar</h1>
+  <div class="sub" id="header-sub">Set up your trial details to begin</div>
+</div>
+
+<div class="tabs">
+  <button class="tab-btn active" data-tab="details">Details</button>
+  <button class="tab-btn" data-tab="application">Application</button>
+  <button class="tab-btn" data-tab="maintenance">Maintenance</button>
+</div>
+
+<!-- TAB 1: DETAILS -->
+<div class="panel active" id="panel-details">
+  <div class="card">
+    <div class="field">
+      <label for="d-crop">Crop</label>
+      <input type="text" id="d-crop" placeholder="e.g. Rice">
+    </div>
+    <div class="field">
+      <label for="d-variety">Variety</label>
+      <input type="text" id="d-variety" placeholder="e.g. RC160, Co39">
+    </div>
+    <div class="field">
+      <label for="d-sowing">Seedling Sowing Date</label>
+      <input type="date" id="d-sowing">
+    </div>
+    <div class="field">
+      <label for="d-planting">Planting / Transplanting Date (0 DAT)</label>
+      <input type="date" id="d-planting">
+    </div>
+    <div class="field">
+      <label for="d-trial">Trial Type</label>
+      <select id="d-trial">
+        <option value="">— Select —</option>
+        <option value="Insecticide">Insecticide</option>
+        <option value="Herbicide">Herbicide</option>
+        <option value="Fungicide">Fungicide</option>
+      </select>
+    </div>
+  </div>
+</div>
+
+<!-- TAB 2: APPLICATION -->
+<div class="panel" id="panel-application">
+  <div class="card">
+    <div id="app-blocks"></div>
+    <button class="add-btn" id="add-app-btn">+ Add Application</button>
+  </div>
+
+  <table id="app-table" style="margin-top:14px;">
+    <thead>
+      <tr><th class="chk-cell">✓</th><th>Day</th><th>Date</th><th>Activity</th></tr>
+    </thead>
+    <tbody id="app-body"></tbody>
+  </table>
+  <div class="progress" id="app-progress"></div>
+</div>
+
+<!-- TAB 3: MAINTENANCE -->
+<div class="panel" id="panel-maintenance">
+  <table>
+    <thead>
+      <tr><th class="chk-cell">✓</th><th>DAT</th><th>Date</th><th>Activity</th></tr>
+    </thead>
+    <tbody id="maint-body"></tbody>
+  </table>
+  <div class="progress" id="maint-progress"></div>
+  <footer>Maintenance dates are based on Planting Date set in the Details tab.</footer>
+</div>
+
+<script>
+const STORAGE_KEY = 'trial-calendar-state-v1';
+
+// ---------- Default data ----------
+const defaultState = {
+  details: { crop: 'Rice', variety: 'RC160 / Co39', sowing: '', planting: new Date().toISOString().slice(0,10), trialType: '' },
+  applications: [
+    { id:'a1', label:'A', date: new Date().toISOString().slice(0,10), doneApp:false, assess:{1:false,3:false,7:false} }
+  ],
+  maintenance: [
+    { id:'m1', dat: 0,  type: 'fert', title: 'Complete (14-14-14)', note: '14.3 kg / 1000 m² · 28.6 kg/0.1ha', done:false },
+    { id:'m2', dat: 14, type: 'fert', title: 'Complete (14-14-14)', note: '14.3 kg / 1000 m²', done:false },
+    { id:'m3', dat: 28, type: 'fert', title: 'Urea (46-0-0)', note: '5.4 kg / 1000 m²', done:false },
+    { id:'m4', dat: 35, type: 'fert', title: 'Urea (46-0-0)', note: '5.5 kg / 1000 m² — timed before PI', done:false },
+    { id:'m5', dat: 38, type: 'fert', title: 'Muriate of Potash (0-0-60)', note: '8.3 kg / 1000 m² — near PI, shifted from 50 DAT', done:false },
+    { id:'m6', dat: 38, type: 'pest', title: 'Stem borer spray (PI timing)', note: 'Targets whitehead-causing generation — confirm w/ egg mass scouting', done:false },
+    { id:'m7', dat: 25, type: 'fert', title: 'Tillermaxx', note: '5 ml per 16 L water (foliar)', done:false },
+    { id:'m8', dat: 7,  type: 'pest', title: 'Incipio', note: 'Deadhearts control', done:false },
+    { id:'m9', dat: 14, type: 'pest', title: 'Incipio', note: 'Deadhearts control', done:false },
+    { id:'m10', dat: 21, type: 'pest', title: 'Prevathon', note: 'Rotate MoA to break resistance', done:false },
+  ]
+};
+
+let state = JSON.parse(JSON.stringify(defaultState));
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const saved = JSON.parse(raw);
+      state = Object.assign({}, defaultState, saved);
+      if (!state.applications || !state.applications.length) state.applications = defaultState.applications;
+      if (!state.maintenance || !state.maintenance.length) state.maintenance = defaultState.maintenance;
+    }
+  } catch (e) { /* ignore */ }
+}
+
+function saveState() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+  catch (e) { console.error('Save failed', e); }
+}
+
+function fmt(d) {
+  return d.toLocaleDateString('en-US', { weekday:'short', year:'numeric', month:'short', day:'numeric' });
+}
+function isToday(d) {
+  const t = new Date(); t.setHours(0,0,0,0);
+  return d.getTime() === t.getTime();
+}
+function addDays(baseStr, n) {
+  const d = new Date(baseStr + 'T00:00:00');
+  d.setDate(d.getDate() + n);
+  return d;
+}
+
+// ---------- Tabs ----------
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('panel-' + btn.dataset.tab).classList.add('active');
+  });
+});
+
+// ---------- TAB 1: Details ----------
+const dCrop = document.getElementById('d-crop');
+const dVariety = document.getElementById('d-variety');
+const dSowing = document.getElementById('d-sowing');
+const dPlanting = document.getElementById('d-planting');
+const dTrial = document.getElementById('d-trial');
+
+function renderDetails() {
+  dCrop.value = state.details.crop || '';
+  dVariety.value = state.details.variety || '';
+  dSowing.value = state.details.sowing || '';
+  dPlanting.value = state.details.planting || '';
+  dTrial.value = state.details.trialType || '';
+  updateHeaderSub();
+}
+
+function updateHeaderSub() {
+  const parts = [];
+  if (state.details.crop) parts.push(state.details.crop);
+  if (state.details.variety) parts.push(state.details.variety);
+  if (state.details.trialType) parts.push(state.details.trialType + ' Trial');
+  document.getElementById('header-sub').textContent = parts.length ? parts.join(' · ') : 'Set up your trial details to begin';
+}
+
+[dCrop, dVariety, dSowing, dTrial].forEach((el, i) => {
+  const keys = ['crop','variety','sowing','trialType'];
+  el.addEventListener('change', () => {
+    state.details[keys[i]] = el.value;
+    saveState();
+    updateHeaderSub();
+  });
+});
+dPlanting.addEventListener('change', () => {
+  state.details.planting = dPlanting.value;
+  saveState();
+  renderApplication();
+  renderMaintenance();
+});
+
+// ---------- TAB 2: Application ----------
+const appBlocksEl = document.getElementById('app-blocks');
+const appBody = document.getElementById('app-body');
+const addAppBtn = document.getElementById('add-app-btn');
+
+function nextLabel() {
+  const used = state.applications.map(a => a.label);
+  const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  for (const l of letters) if (!used.includes(l)) return l;
+  return 'X' + (state.applications.length + 1);
+}
+
+addAppBtn.addEventListener('click', () => {
+  state.applications.push({
+    id: 'a' + Date.now(),
+    label: nextLabel(),
+    date: state.details.planting || new Date().toISOString().slice(0,10),
+    doneApp: false,
+    assess: {1:false, 3:false, 7:false}
+  });
+  saveState();
+  renderApplication();
+});
+
+function renderApplication() {
+  // form blocks
+  appBlocksEl.innerHTML = '';
+  state.applications.forEach(app => {
+    const div = document.createElement('div');
+    div.className = 'app-block';
+    div.innerHTML = `
+      <h3>Application ${app.label}</h3>
+      <div class="app-row">
+        <div class="field">
+          <label>Date of Application ${app.label}</label>
+          <input type="date" data-id="${app.id}" class="app-date" value="${app.date}">
+        </div>
+        ${state.applications.length > 1 ? `<button class="remove-btn" data-id="${app.id}">Remove</button>` : ''}
+      </div>
+      <div class="assess-note">Assessments auto-scheduled at 1, 3 & 7 DA${app.label} — tracked in the table below.</div>
+    `;
+    appBlocksEl.appendChild(div);
+  });
+
+  appBlocksEl.querySelectorAll('.app-date').forEach(inp => {
+    inp.addEventListener('change', e => {
+      const app = state.applications.find(a => a.id === e.target.dataset.id);
+      if (app) app.date = e.target.value;
+      saveState();
+      renderApplication();
+    });
+  });
+  appBlocksEl.querySelectorAll('.remove-btn').forEach(btn => {
+    btn.addEventListener('click', e => {
+      state.applications = state.applications.filter(a => a.id !== e.target.dataset.id);
+      saveState();
+      renderApplication();
+    });
+  });
+
+  // table
+  const rows = [];
+  state.applications.forEach(app => {
+    if (!app.date) return;
+    rows.push({
+      dateObj: new Date(app.date + 'T00:00:00'),
+      dayLabel: `App ${app.label}`,
+      title: `Application ${app.label}`,
+      note: 'Date of application',
+      type: 'pest',
+      checked: app.doneApp,
+      onToggle: (val) => { app.doneApp = val; }
+    });
+    [1,3,7].forEach(n => {
+      const d = new Date(app.date + 'T00:00:00');
+      d.setDate(d.getDate() + n);
+      rows.push({
+        dateObj: d,
+        dayLabel: `${n} DA${app.label}`,
+        title: `Assessment — ${n} DA${app.label}`,
+        note: `Rate/assess ${n} day(s) after Application ${app.label}`,
+        type: 'assess',
+        checked: !!app.assess[n],
+        onToggle: (val) => { app.assess[n] = val; }
+      });
+    });
+  });
+  rows.sort((a,b) => a.dateObj - b.dateObj);
+
+  appBody.innerHTML = '';
+  rows.forEach((r, idx) => {
+    const tr = document.createElement('tr');
+    const catClass = r.type === 'pest' ? 'cat-pest' : 'cat-assess';
+    const tagClass = r.type === 'pest' ? 'tag-pest' : 'tag-assess';
+    const tagLabel = r.type === 'pest' ? 'APPLICATION' : 'ASSESSMENT';
+    tr.className = catClass + (isToday(r.dateObj) ? ' today-row' : '') + (r.checked ? ' done' : '');
+    tr.innerHTML = `
+      <td class="chk-cell"><input type="checkbox" data-idx="${idx}" ${r.checked ? 'checked' : ''}></td>
+      <td class="dat">${r.dayLabel}</td>
+      <td class="date">${fmt(r.dateObj)}</td>
+      <td>
+        <span class="title-text">${r.title}</span>
+        <span class="tag ${tagClass}">${tagLabel}</span>
+        <div class="note">${r.note}</div>
+      </td>`;
+    appBody.appendChild(tr);
+    tr.querySelector('input').addEventListener('change', e => {
+      r.onToggle(e.target.checked);
+      saveState();
+      renderApplication();
+    });
+  });
+
+  const total = rows.length;
+  const done = rows.filter(r => r.checked).length;
+  document.getElementById('app-progress').textContent = total ? `${done} / ${total} completed` : 'Add an application date to begin';
+}
+
+// ---------- TAB 3: Maintenance ----------
+const maintBody = document.getElementById('maint-body');
+
+function renderMaintenance() {
+  const planting = state.details.planting;
+  maintBody.innerHTML = '';
+  if (!planting) {
+    maintBody.innerHTML = `<tr><td colspan="4" style="padding:16px; color:#889;">Set a Planting Date in the Details tab first.</td></tr>`;
+    document.getElementById('maint-progress').textContent = '';
+    return;
+  }
+  const sorted = [...state.maintenance].sort((a,b) => a.dat - b.dat);
+  sorted.forEach(ev => {
+    const d = addDays(planting, ev.dat);
+    const tr = document.createElement('tr');
+    tr.className = (ev.type === 'fert' ? 'cat-fert' : 'cat-pest') + (isToday(d) ? ' today-row' : '') + (ev.done ? ' done' : '');
+    tr.innerHTML = `
+      <td class="chk-cell"><input type="checkbox" data-id="${ev.id}" ${ev.done ? 'checked' : ''}></td>
+      <td class="dat">${ev.dat} DAT</td>
+      <td class="date">${fmt(d)}</td>
+      <td>
+        <span class="title-text">${ev.title}</span>
+        <span class="tag ${ev.type === 'fert' ? 'tag-fert' : 'tag-pest'}">${ev.type === 'fert' ? 'FERTILIZER' : 'PEST'}</span>
+        <div class="note">${ev.note}</div>
+      </td>`;
+    maintBody.appendChild(tr);
+  });
+
+  maintBody.querySelectorAll('input[type=checkbox]').forEach(cb => {
+    cb.addEventListener('change', e => {
+      const ev = state.maintenance.find(x => x.id === e.target.dataset.id);
+      if (ev) ev.done = e.target.checked;
+      saveState();
+      renderMaintenance();
+    });
+  });
+
+  const doneCount = state.maintenance.filter(e => e.done).length;
+  document.getElementById('maint-progress').textContent = `${doneCount} / ${state.maintenance.length} completed`;
+}
+
+// ---------- Init ----------
+loadState();
+renderDetails();
+renderApplication();
+renderMaintenance();
+
+// ---------- PWA: register service worker for offline support ----------
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(err => console.log('SW registration failed', err));
+  });
+}
+</script>
+
+</body>
+</html>
