@@ -121,8 +121,17 @@
   .rate-entry { background:#fff; border-radius:10px; padding:12px; box-shadow:0 1px 4px rgba(0,0,0,0.08); margin-bottom:10px; }
   .rate-entry-head { display:flex; justify-content:space-between; align-items:flex-start; gap:8px; }
   .rate-entry-name { font-weight:700; font-size:0.95em; }
-  .rate-entry-row { font-size:0.8em; color:#556; margin-top:2px; }
-  .rate-entry-row b { color:#1f2a1f; }
+  .rate-entry-ai { display:inline-block; font-family: -apple-system, Segoe UI, Roboto, monospace; font-size:0.68em; font-weight:600; color:#8a5a10; background:#fdf1de; border-radius:5px; padding:2px 7px; margin-left:6px; vertical-align:middle; letter-spacing:0.01em; }
+  .rate-entry-actions { display:flex; gap:6px; flex-shrink:0; }
+  .rate-entry-actions button { background:none; border:none; font-size:0.75em; font-weight:600; cursor:pointer; padding:2px 6px; }
+  .rate-edit-btn { color:#2e5e2e; }
+  .rate-entry-target { font-size:0.8em; color:#556; margin-top:4px; }
+  .rate-crop-block { background:#fafbf8; border:1px solid #e3e8df; border-radius:8px; padding:8px 10px; margin-top:8px; }
+  .rate-crop-name { font-weight:700; font-size:0.82em; color:#2e5e2e; }
+  .rate-crop-row { font-size:0.78em; color:#556; margin-top:2px; }
+  .rate-crop-row b { color:#1f2a1f; }
+  .rf-crop-row { border:1px solid #e3e8df; border-radius:8px; padding:10px; margin-bottom:10px; position:relative; }
+  .rf-crop-row .remove-crop-row-btn { position:absolute; top:8px; right:8px; background:#fbe6dd; color:#a3441d; border:none; border-radius:6px; padding:4px 8px; font-size:0.7em; font-weight:600; cursor:pointer; }
 </style>
 </head>
 <body>
@@ -177,7 +186,7 @@
   </div>
 
   <div id="rates-cat-list"></div>
-  <button class="add-btn secondary" id="add-rate-btn">+ Add Rate</button>
+  <button class="add-btn secondary" id="add-rate-btn">+ Add Product</button>
 
   <div class="card" id="rate-form-card" style="display:none; margin-top:14px;">
     <div class="field">
@@ -192,23 +201,18 @@
       <label>Product Name</label>
       <input type="text" id="rf-name" placeholder="e.g. Incipio">
     </div>
+    <div class="field">
+      <label>Active Ingredient (AI)</label>
+      <input type="text" id="rf-ai" placeholder="e.g. Chlorantraniliprole 5% + Thiamethoxam 20%">
+    </div>
     <div class="field" id="rf-target-pest-field">
       <label>Target Pest / Disease / Weed</label>
       <input type="text" id="rf-target-pest" placeholder="e.g. Stemborer, other Lepidopterans">
     </div>
-    <div class="field">
-      <label>Rate per Tank (ml)</label>
-      <input type="text" id="rf-rate-tank" placeholder="e.g. 20 ml / 16L tank">
-    </div>
-    <div class="field">
-      <label>Rate per ha (ml)</label>
-      <input type="text" id="rf-rate-ha" placeholder="e.g. 500 ml/ha">
-    </div>
-    <div class="field">
-      <label>Application Timing</label>
-      <input type="text" id="rf-timing" placeholder="e.g. PI stage, 7/14/21 DAT rotation">
-    </div>
-    <button class="add-btn" id="rf-save-btn">Save Rate</button>
+    <div class="section-label">Rate per Crop</div>
+    <div id="rf-crop-rows"></div>
+    <button class="add-btn secondary" id="rf-add-crop-row-btn" type="button">+ Add Crop Rate</button>
+    <button class="add-btn" id="rf-save-btn" style="margin-top:14px;">Save Product</button>
   </div>
 </div>
 
@@ -381,7 +385,7 @@
 </div>
 
 <script>
-const APP_VERSION = '1.4';
+const APP_VERSION = '1.6';
 const STORAGE_KEY = 'trial-calendar-state-v3';
 
 const CROPS = [
@@ -453,7 +457,13 @@ function computePlannedItems(trial) {
   return fertItems.concat(riceFixedItems());
 }
 
-function todayStr() { return new Date().toISOString().slice(0,10); }
+function todayStr() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return y + '-' + m + '-' + day;
+}
 
 function makeTrial(cropKey, variety, trialType) {
   const meta = cropMeta(cropKey);
@@ -476,15 +486,27 @@ let state = { trials: [], currentTrialId: null };
 const RATES_STORAGE_KEY = 'trial-calendar-rate-library-v1'; // isolated key — untouched by trial-data structure changes
 let rateLibrary = { insecticide: [], herbicide: [], fungicide: [] };
 
+function migrateRateEntry(e) {
+  if (typeof e.activeIngredient !== 'string') e.activeIngredient = '';
+  // Old format had flat rateTank/rateHa/timing fields — migrate to cropRates array (unspecified crop)
+  if (!e.cropRates) {
+    e.cropRates = [];
+    if (e.rateTank || e.rateHa || e.timing) {
+      e.cropRates.push({ crop: '', tank: e.rateTank || '', ha: e.rateHa || '', timing: e.timing || '' });
+    }
+    delete e.rateTank; delete e.rateHa; delete e.timing;
+  }
+  return e;
+}
 function loadRateLibrary() {
   try {
     const raw = localStorage.getItem(RATES_STORAGE_KEY);
     if (raw) {
       const saved = JSON.parse(raw);
       if (saved) {
-        rateLibrary.insecticide = saved.insecticide || [];
-        rateLibrary.herbicide = saved.herbicide || [];
-        rateLibrary.fungicide = saved.fungicide || [];
+        rateLibrary.insecticide = (saved.insecticide || []).map(migrateRateEntry);
+        rateLibrary.herbicide = (saved.herbicide || []).map(migrateRateEntry);
+        rateLibrary.fungicide = (saved.fungicide || []).map(migrateRateEntry);
       }
     }
   } catch (e) { }
@@ -835,6 +857,8 @@ const ratesCatList = document.getElementById('rates-cat-list');
 const rateFormCard = document.getElementById('rate-form-card');
 const rfCategory = document.getElementById('rf-category');
 const rfTargetPestField = document.getElementById('rf-target-pest-field');
+const rfCropRows = document.getElementById('rf-crop-rows');
+let editingRateId = null; // null = adding new, otherwise id of entry being edited
 
 document.querySelectorAll('.rate-tab-btn').forEach(function(btn) {
   btn.addEventListener('click', function() {
@@ -846,40 +870,76 @@ document.querySelectorAll('.rate-tab-btn').forEach(function(btn) {
   });
 });
 
-function toggleTargetPestField() {
-  rfTargetPestField.style.display = 'block';
+function addCropRow(cropVal, tankVal, haVal, timingVal) {
+  const row = document.createElement('div');
+  row.className = 'rf-crop-row';
+  row.innerHTML = '<button type="button" class="remove-crop-row-btn">Remove</button>' +
+    '<div class="field"><label>Crop</label><input type="text" class="rf-crop-name-input" placeholder="e.g. Rice" value="' + (cropVal || '') + '"></div>' +
+    '<div class="field"><label>Rate per Tank (ml)</label><input type="text" class="rf-crop-tank-input" placeholder="e.g. 20 ml / 16L" value="' + (tankVal || '') + '"></div>' +
+    '<div class="field"><label>Rate per ha (ml)</label><input type="text" class="rf-crop-ha-input" placeholder="e.g. 500 ml/ha" value="' + (haVal || '') + '"></div>' +
+    '<div class="field"><label>Application Timing</label><input type="text" class="rf-crop-timing-input" placeholder="e.g. 7 &amp; 14 DAT" value="' + (timingVal || '') + '"></div>';
+  row.querySelector('.remove-crop-row-btn').addEventListener('click', function() {
+    row.remove();
+  });
+  rfCropRows.appendChild(row);
 }
-rfCategory.addEventListener('change', toggleTargetPestField);
+document.getElementById('rf-add-crop-row-btn').addEventListener('click', function() { addCropRow(); });
 
-function openRateForm() {
+function openRateForm(existingEntry) {
   rateFormCard.style.display = 'block';
-  rfCategory.value = currentRateCat;
-  toggleTargetPestField();
-  document.getElementById('rf-name').value = '';
-  document.getElementById('rf-target-pest').value = '';
-  document.getElementById('rf-rate-tank').value = '';
-  document.getElementById('rf-rate-ha').value = '';
-  document.getElementById('rf-timing').value = '';
+  rfCropRows.innerHTML = '';
+  if (existingEntry) {
+    editingRateId = existingEntry.id;
+    rfCategory.value = currentRateCat;
+    document.getElementById('rf-name').value = existingEntry.name || '';
+    document.getElementById('rf-ai').value = existingEntry.activeIngredient || '';
+    document.getElementById('rf-target-pest').value = existingEntry.targetPest || '';
+    (existingEntry.cropRates || []).forEach(function(cr) {
+      addCropRow(cr.crop, cr.tank, cr.ha, cr.timing);
+    });
+    if (!existingEntry.cropRates || !existingEntry.cropRates.length) addCropRow();
+  } else {
+    editingRateId = null;
+    rfCategory.value = currentRateCat;
+    document.getElementById('rf-name').value = '';
+    document.getElementById('rf-ai').value = '';
+    document.getElementById('rf-target-pest').value = '';
+    addCropRow();
+  }
   rateFormCard.scrollIntoView({ behavior:'smooth', block:'nearest' });
 }
-document.getElementById('add-rate-btn').addEventListener('click', openRateForm);
+document.getElementById('add-rate-btn').addEventListener('click', function() { openRateForm(null); });
 
 document.getElementById('rf-save-btn').addEventListener('click', function() {
   const category = rfCategory.value;
   const name = document.getElementById('rf-name').value.trim();
   if (!name) { alert('Enter a product name first.'); return; }
-  const entry = {
-    id: 'r' + Date.now(),
-    name: name,
-    targetPest: document.getElementById('rf-target-pest').value.trim(),
-    rateTank: document.getElementById('rf-rate-tank').value.trim(),
-    rateHa: document.getElementById('rf-rate-ha').value.trim(),
-    timing: document.getElementById('rf-timing').value.trim()
-  };
+  const activeIngredient = document.getElementById('rf-ai').value.trim();
+
+  const cropRates = [];
+  rfCropRows.querySelectorAll('.rf-crop-row').forEach(function(row) {
+    const crop = row.querySelector('.rf-crop-name-input').value.trim();
+    const tank = row.querySelector('.rf-crop-tank-input').value.trim();
+    const ha = row.querySelector('.rf-crop-ha-input').value.trim();
+    const timing = row.querySelector('.rf-crop-timing-input').value.trim();
+    if (crop || tank || ha || timing) cropRates.push({ crop: crop, tank: tank, ha: ha, timing: timing });
+  });
+
   if (!rateLibrary[category]) rateLibrary[category] = [];
-  rateLibrary[category].push(entry);
+
+  if (editingRateId) {
+    // Find and remove from whichever category it was in (in case category changed)
+    ['insecticide','herbicide','fungicide'].forEach(function(cat) {
+      rateLibrary[cat] = (rateLibrary[cat] || []).filter(function(x) { return x.id !== editingRateId; });
+    });
+    rateLibrary[category].push({ id: editingRateId, name: name, activeIngredient: activeIngredient, targetPest: document.getElementById('rf-target-pest').value.trim(), cropRates: cropRates });
+  } else {
+    rateLibrary[category].push({ id: 'r' + Date.now(), name: name, activeIngredient: activeIngredient, targetPest: document.getElementById('rf-target-pest').value.trim(), cropRates: cropRates });
+  }
+
   saveRateLibrary();
   rateFormCard.style.display = 'none';
+  editingRateId = null;
   currentRateCat = category;
   document.querySelectorAll('.rate-tab-btn').forEach(function(b) { b.classList.toggle('active', b.dataset.rateCat === category); });
   renderRatesList();
@@ -895,19 +955,31 @@ function renderRatesList() {
   items.forEach(function(e) {
     const div = document.createElement('div');
     div.className = 'rate-entry';
-    let rows = '';
-    if (e.targetPest) rows += '<div class="rate-entry-row"><b>Target:</b> ' + e.targetPest + '</div>';
-    if (e.rateTank) rows += '<div class="rate-entry-row"><b>Per tank:</b> ' + e.rateTank + '</div>';
-    if (e.rateHa) rows += '<div class="rate-entry-row"><b>Per ha:</b> ' + e.rateHa + '</div>';
-    if (e.timing) rows += '<div class="rate-entry-row"><b>Timing:</b> ' + e.timing + '</div>';
-    div.innerHTML = '<div class="rate-entry-head"><div class="rate-entry-name">' + e.name + '</div><button class="maint-remove-btn" data-id="' + e.id + '">Remove</button></div>' + rows;
+    let cropBlocks = '';
+    (e.cropRates || []).forEach(function(cr) {
+      let cropRows = '';
+      if (cr.tank) cropRows += '<div class="rate-crop-row"><b>Per tank:</b> ' + cr.tank + '</div>';
+      if (cr.ha) cropRows += '<div class="rate-crop-row"><b>Per ha:</b> ' + cr.ha + '</div>';
+      if (cr.timing) cropRows += '<div class="rate-crop-row"><b>Timing:</b> ' + cr.timing + '</div>';
+      cropBlocks += '<div class="rate-crop-block"><div class="rate-crop-name">' + (cr.crop || 'Unspecified crop') + '</div>' + cropRows + '</div>';
+    });
+    div.innerHTML = '<div class="rate-entry-head"><div class="rate-entry-name">' + e.name + (e.activeIngredient ? '<span class="rate-entry-ai">' + e.activeIngredient + '</span>' : '') + '</div><div class="rate-entry-actions"><button class="rate-edit-btn" data-id="' + e.id + '">Edit</button><button class="maint-remove-btn" data-id="' + e.id + '">Remove</button></div></div>' +
+      (e.targetPest ? '<div class="rate-entry-target"><b>Target:</b> ' + e.targetPest + '</div>' : '') +
+      cropBlocks;
     ratesCatList.appendChild(div);
   });
   ratesCatList.querySelectorAll('.maint-remove-btn').forEach(function(btn) {
     btn.addEventListener('click', function() {
+      if (!confirm('Remove this product from your rate reference?')) return;
       rateLibrary[currentRateCat] = rateLibrary[currentRateCat].filter(function(x) { return x.id !== btn.dataset.id; });
       saveRateLibrary();
       renderRatesList();
+    });
+  });
+  ratesCatList.querySelectorAll('.rate-edit-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      const entry = (rateLibrary[currentRateCat] || []).find(function(x) { return x.id === btn.dataset.id; });
+      if (entry) openRateForm(entry);
     });
   });
 }
