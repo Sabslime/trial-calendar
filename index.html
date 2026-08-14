@@ -90,6 +90,7 @@
   .trial-icon { font-size:1.8em; width:44px; height:44px; display:flex; align-items:center; justify-content:center; background:#e3f1e3; border-radius:10px; flex-shrink:0; }
   .trial-info { flex:1; min-width:0; }
   .trial-name { font-weight:700; font-size:1em; color:#1f2a1f; }
+  .trial-dat-badge { display:inline-block; font-family: -apple-system, Segoe UI, Roboto, monospace; font-size:0.72em; font-weight:700; letter-spacing:0.02em; color:#2e5e2e; background:#e3f1e3; border-radius:5px; padding:2px 7px; margin-left:6px; vertical-align:middle; }
   .trial-meta { font-size:0.78em; color:#667; margin-top:2px; }
   .trial-arrow { color:#aab; font-size:1.2em; }
   .empty-state { text-align:center; color:#889; padding:40px 20px; font-size:0.9em; }
@@ -139,6 +140,7 @@
   <div class="home-nav-row">
     <div class="home-nav-btn" id="go-rates-btn">Rate Reference</div>
     <div class="home-nav-btn" id="go-archived-btn">Archived</div>
+    <div class="home-nav-btn" id="go-settings-btn">Settings</div>
   </div>
   <div id="trial-list"></div>
   <button class="new-trial-btn" id="new-trial-btn">+ New Trial</button>
@@ -214,6 +216,18 @@
   <div id="archived-list"></div>
 </div>
 
+<div id="view-settings" class="home-wrap" style="display:none;">
+  <div class="card">
+    <div class="section-label">Windy Forecast</div>
+    <div class="field">
+      <label for="settings-windy-key">Windy API Key</label>
+      <input type="text" id="settings-windy-key" placeholder="Paste your api.windy.com Point Forecast key">
+      <div class="field-hint">Free key from api.windy.com. Used to show rain forecast (next 10 days) on Application and Maintenance dates. Note: shows precipitation amount (mm), not an exact % probability — Windy's free tier doesn't provide that.</div>
+    </div>
+    <button class="add-btn" id="settings-save-btn">Save</button>
+  </div>
+</div>
+
 
 <div id="view-trial" style="display:none;">
   <div class="tabs">
@@ -251,6 +265,14 @@
       <div class="field">
         <label for="d-planting-distance">Planting Distance (cm)</label>
         <input type="text" id="d-planting-distance" placeholder="e.g. 20 x 20 cm">
+      </div>
+      <div class="field">
+        <label>Trial Location</label>
+        <button class="add-btn secondary" id="set-location-btn" type="button" style="margin-top:0;">📍 Set Trial Location (GPS)</button>
+        <div class="field-hint" id="location-status">No location set yet.</div>
+        <div id="location-map-wrap" style="display:none; margin-top:8px; border-radius:8px; overflow:hidden; border:1px solid #e3e8df;">
+          <iframe id="location-map" width="100%" height="160" frameborder="0" style="display:block;"></iframe>
+        </div>
       </div>
       <div class="field">
         <label for="d-sowing">Seedling Sowing Date</label>
@@ -359,7 +381,7 @@
 </div>
 
 <script>
-const APP_VERSION = '1.3';
+const APP_VERSION = '1.4';
 const STORAGE_KEY = 'trial-calendar-state-v3';
 
 const CROPS = [
@@ -372,6 +394,12 @@ const CROPS = [
 ];
 function cropMeta(key) { return CROPS.find(c => c.key === key) || CROPS[CROPS.length - 1]; }
 function displayTitle(t) { return (t.details.title && t.details.title.trim()) ? t.details.title.trim() : t.details.crop; }
+function currentDatBadge(t) {
+  if (!t.details.planting) return '';
+  const dat = daysBetween(t.details.planting, todayStr());
+  if (dat < 0) return '<span class="trial-dat-badge">starts in ' + Math.abs(dat) + 'd</span>';
+  return '<span class="trial-dat-badge">' + dat + ' DAT</span>';
+}
 
 const RICE_RATES = {
   wet: { label: 'Wet season — 90-40-90', N: 90, P: 40, K: 90 },
@@ -433,7 +461,7 @@ function makeTrial(cropKey, variety, trialType) {
     id: 't' + Date.now(),
     details: {
       title: '', crop: meta.label, cropKey: cropKey, variety: variety || '', sowing: '', planting: todayStr(), trialType: trialType || '',
-      plantingDistance: '', rateKey: 'wet', totalAreaSqm: '', plotSizeSqm: ''
+      plantingDistance: '', location: null, rateKey: 'wet', totalAreaSqm: '', plotSizeSqm: ''
     },
     applications: [
       { id:'a1', label:'A', date: todayStr(), doneApp:false, assess:{1:false,3:false,7:false} }
@@ -466,6 +494,78 @@ function saveRateLibrary() {
   catch (e) { console.error('Rate library save failed', e); }
 }
 
+// ---- Settings (isolated storage, survives trial-data structure changes) ----
+const SETTINGS_STORAGE_KEY = 'trial-calendar-settings-v1';
+let appSettings = { windyApiKey: '' };
+function loadSettings() {
+  try {
+    const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
+    if (raw) { const saved = JSON.parse(raw); if (saved) appSettings = saved; }
+  } catch (e) { }
+}
+function saveSettings() {
+  try { localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(appSettings)); }
+  catch (e) { console.error('Settings save failed', e); }
+}
+
+// ---- Windy forecast (per-trial, in-memory only — refetched each time a trial is opened) ----
+let forecastCache = {}; // { 'YYYY-MM-DD': { morningMm, afternoonMm } }
+let forecastLoading = false;
+let forecastError = null;
+
+function classifyPrecip(mm) {
+  if (mm <= 0) return 'No rain expected';
+  if (mm < 1) return 'Slight chance — ' + mm.toFixed(1) + 'mm';
+  if (mm < 5) return 'Likely light rain — ' + mm.toFixed(1) + 'mm';
+  return 'Rain likely — ' + mm.toFixed(1) + 'mm';
+}
+
+async function fetchWindyForecast(lat, lon) {
+  forecastCache = {};
+  forecastError = null;
+  if (!appSettings.windyApiKey || lat == null || lon == null) return;
+  forecastLoading = true;
+  try {
+    const res = await fetch('https://api.windy.com/api/point-forecast/v2', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lat: lat, lon: lon, model: 'gfs', parameters: ['precip'], key: appSettings.windyApiKey, levels: ['surface'] })
+    });
+    if (!res.ok) throw new Error('Windy API error ' + res.status);
+    const data = await res.json();
+    const ts = data.ts || [];
+    const precip = data['precip-surface'] || [];
+    for (let i = 0; i < ts.length; i++) {
+      const utcMs = ts[i];
+      const localMs = utcMs + 8 * 3600 * 1000; // Philippines UTC+8 fixed offset
+      const localDate = new Date(localMs);
+      const dateStr = localDate.toISOString().slice(0,10);
+      const hour = localDate.getUTCHours();
+      const mm = precip[i] || 0;
+      if (!forecastCache[dateStr]) forecastCache[dateStr] = { morningMm: 0, afternoonMm: 0 };
+      if (hour >= 6 && hour < 12) forecastCache[dateStr].morningMm += mm;
+      else if (hour >= 12 && hour < 18) forecastCache[dateStr].afternoonMm += mm;
+    }
+  } catch (e) {
+    forecastError = e.message;
+    console.error('Windy fetch failed', e);
+  }
+  forecastLoading = false;
+}
+
+function rainBadgeHtml(dateStr) {
+  const t = currentTrial();
+  if (!t || !t.details.location || !appSettings.windyApiKey) return '';
+  const today = todayStr();
+  const daysOut = daysBetween(today, dateStr);
+  if (daysOut < 0 || daysOut > 10) return '';
+  if (forecastLoading) return '<div class="note">🌦 Loading forecast…</div>';
+  if (forecastError) return '<div class="note">🌦 Forecast unavailable (check API key)</div>';
+  const day = forecastCache[dateStr];
+  if (!day) return '<div class="note">🌦 No forecast data for this date</div>';
+  return '<div class="note">🌦 Morning (6am–12nn): ' + classifyPrecip(day.morningMm) + '</div><div class="note">🌦 Afternoon (12nn–6pm): ' + classifyPrecip(day.afternoonMm) + '</div>';
+}
+
 function loadState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -477,6 +577,7 @@ function loadState() {
           if (!t.customMaintenance) t.customMaintenance = [];
           if (typeof t.details.title !== 'string') t.details.title = '';
           if (typeof t.details.plantingDistance !== 'string') t.details.plantingDistance = '';
+          if (t.details.location === undefined) t.details.location = null;
           if (typeof t.archived !== 'boolean') t.archived = false;
         });
       }
@@ -528,6 +629,7 @@ const viewNew = document.getElementById('view-new');
 const viewRates = document.getElementById('view-rates');
 const viewArchived = document.getElementById('view-archived');
 const viewTrial = document.getElementById('view-trial');
+const viewSettings = document.getElementById('view-settings');
 const backBtn = document.getElementById('back-btn');
 const appTitle = document.getElementById('app-title');
 const headerSub = document.getElementById('header-sub');
@@ -539,6 +641,7 @@ function hideAllViews() {
   viewNew.style.display = 'none';
   viewRates.style.display = 'none';
   viewArchived.style.display = 'none';
+  viewSettings.style.display = 'none';
   viewTrial.style.display = 'none';
 }
 
@@ -582,6 +685,15 @@ function showArchived() {
   renderArchivedList();
 }
 
+function showSettings() {
+  hideAllViews();
+  viewSettings.style.display = 'block';
+  backBtn.style.display = 'inline-block';
+  appTitle.textContent = 'Settings';
+  headerSub.textContent = 'Saved separately — not affected by app updates';
+  document.getElementById('settings-windy-key').value = appSettings.windyApiKey || '';
+}
+
 function showTrial(id) {
   state.currentTrialId = id;
   saveState();
@@ -601,12 +713,24 @@ function showTrial(id) {
   renderMaintenance();
   calMonthOffset = 0;
   renderOverview();
+  if (t.details.location && appSettings.windyApiKey) {
+    fetchWindyForecast(t.details.location.lat, t.details.location.lon).then(function() {
+      renderApplication();
+      renderMaintenance();
+    });
+  }
 }
 
 backBtn.addEventListener('click', showHome);
 document.getElementById('new-trial-btn').addEventListener('click', showNewTrial);
 document.getElementById('go-rates-btn').addEventListener('click', showRates);
 document.getElementById('go-archived-btn').addEventListener('click', showArchived);
+document.getElementById('go-settings-btn').addEventListener('click', showSettings);
+document.getElementById('settings-save-btn').addEventListener('click', function() {
+  appSettings.windyApiKey = document.getElementById('settings-windy-key').value.trim();
+  saveSettings();
+  alert('Saved.');
+});
 
 const trialList = document.getElementById('trial-list');
 function attachLongPress(el, onLongPress) {
@@ -641,7 +765,7 @@ function renderHome() {
     if (t.details.variety) metaParts.push(t.details.variety);
     if (t.details.trialType) metaParts.push(t.details.trialType + ' Trial');
     metaParts.push('Planted ' + (t.details.planting || '—'));
-    div.innerHTML = '<div class="trial-icon">' + meta.emoji + '</div><div class="trial-info"><div class="trial-name">' + displayTitle(t) + '</div><div class="trial-meta">' + metaParts.join(' · ') + '</div></div><div class="trial-arrow">›</div>';
+    div.innerHTML = '<div class="trial-icon">' + meta.emoji + '</div><div class="trial-info"><div class="trial-name">' + displayTitle(t) + currentDatBadge(t) + '</div><div class="trial-meta">' + metaParts.join(' · ') + '</div></div><div class="trial-arrow">›</div>';
     div.addEventListener('click', function() { showTrial(t.id); });
     attachLongPress(div, function() {
       if (confirm('Archive "' + displayTitle(t) + '"? It will be hidden from your home screen. You can restore it from Archived.')) {
@@ -823,7 +947,42 @@ function renderDetails() {
   dTotalArea.value = t.details.totalAreaSqm || '';
   dPlotSize.value = t.details.plotSizeSqm || '';
   riceRateCard.style.display = t.details.cropKey === 'rice' ? 'block' : 'none';
+  renderLocationStatus(t);
 }
+
+const locationStatusEl = document.getElementById('location-status');
+const locationMapWrap = document.getElementById('location-map-wrap');
+const locationMapFrame = document.getElementById('location-map');
+function renderLocationStatus(t) {
+  if (t.details.location && t.details.location.lat != null) {
+    const lat = t.details.location.lat, lon = t.details.location.lon;
+    locationStatusEl.textContent = 'Set: ' + lat.toFixed(5) + ', ' + lon.toFixed(5);
+    const d = 0.01;
+    locationMapFrame.src = 'https://www.openstreetmap.org/export/embed.html?bbox=' + (lon-d) + ',' + (lat-d) + ',' + (lon+d) + ',' + (lat+d) + '&layer=mapnik&marker=' + lat + ',' + lon;
+    locationMapWrap.style.display = 'block';
+  } else {
+    locationStatusEl.textContent = 'No location set yet.';
+    locationMapWrap.style.display = 'none';
+  }
+}
+document.getElementById('set-location-btn').addEventListener('click', function() {
+  const t = currentTrial(); if (!t) return;
+  if (!navigator.geolocation) { alert('GPS not available on this device/browser.'); return; }
+  locationStatusEl.textContent = 'Getting location…';
+  navigator.geolocation.getCurrentPosition(function(pos) {
+    t.details.location = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+    saveState();
+    renderLocationStatus(t);
+    if (appSettings.windyApiKey) {
+      fetchWindyForecast(t.details.location.lat, t.details.location.lon).then(function() {
+        renderApplication();
+        renderMaintenance();
+      });
+    }
+  }, function(err) {
+    locationStatusEl.textContent = 'Could not get location: ' + err.message;
+  }, { enableHighAccuracy: true, timeout: 15000 });
+});
 function updateHeaderSub() {
   const t = currentTrial(); if (!t) return;
   const parts = [];
@@ -952,7 +1111,7 @@ function renderApplication() {
     const tagClass = r.type === 'pest' ? 'tag-pest' : 'tag-assess';
     const tagLabel = r.type === 'pest' ? 'APPLICATION' : 'ASSESSMENT';
     tr.className = catClass + (isToday(r.dateObj) ? ' today-row' : '') + (r.checked ? ' done' : '');
-    tr.innerHTML = '<td class="chk-cell"><input type="checkbox" data-idx="' + idx + '" ' + (r.checked ? 'checked' : '') + '></td><td class="dat">' + r.dayLabel + '</td><td class="date">' + fmt(r.dateObj) + '</td><td><span class="title-text">' + r.title + '</span><span class="tag ' + tagClass + '">' + tagLabel + '</span><div class="note">' + r.note + '</div></td>';
+    tr.innerHTML = '<td class="chk-cell"><input type="checkbox" data-idx="' + idx + '" ' + (r.checked ? 'checked' : '') + '></td><td class="dat">' + r.dayLabel + '</td><td class="date">' + fmt(r.dateObj) + '</td><td><span class="title-text">' + r.title + '</span><span class="tag ' + tagClass + '">' + tagLabel + '</span><div class="note">' + r.note + '</div>' + rainBadgeHtml(r.dateObj.toISOString().slice(0,10)) + '</td>';
     appBody.appendChild(tr);
     tr.querySelector('input').addEventListener('change', function(e) {
       r.onToggle(e.target.checked);
@@ -1039,12 +1198,15 @@ function renderMaintenance() {
     planned.forEach(function(ev) {
       const ms = maintState(t, ev.id);
       const resolvedDate = ms.actualDate ? new Date(ms.actualDate + 'T00:00:00') : addDays(planting, ev.dat);
-      entries.push({ kind: 'planned', ev: ev, ms: ms, sortDate: resolvedDate });
+      entries.push({ kind: 'planned', ev: ev, ms: ms, sortDate: resolvedDate, isDone: ms.done });
     });
     custom.forEach(function(c) {
-      entries.push({ kind: 'added', c: c, sortDate: new Date(c.date + 'T00:00:00') });
+      entries.push({ kind: 'added', c: c, sortDate: new Date(c.date + 'T00:00:00'), isDone: c.done });
     });
-    entries.sort(function(a,b) { return a.sortDate - b.sortDate; });
+    entries.sort(function(a,b) {
+      if (a.isDone !== b.isDone) return a.isDone ? 1 : -1;
+      return a.sortDate - b.sortDate;
+    });
 
     entries.forEach(function(entry) {
       const group = document.createElement('div');
@@ -1058,7 +1220,7 @@ function renderMaintenance() {
         const tagClass = ev.type === 'fert' ? 'tag-fert' : 'tag-pest';
         const tagLabel = ev.type === 'fert' ? 'FERTILIZER' : 'PEST';
 
-        group.innerHTML = '<div class="maint-planned-row ' + catClass + '"><div class="maint-title-block"><span class="title-text" style="' + (ms.done ? 'text-decoration:line-through;opacity:0.6;' : '') + '">' + ev.title + '</span><span class="tag ' + tagClass + '">' + tagLabel + '</span><span class="tag tag-planned">PLANNED · ' + ev.dat + ' DAT</span><div class="note">' + fmt(plannedDate) + '</div><div class="note">' + ev.note + '</div></div></div><div class="maint-actual-row"><div class="chk-cell"><input type="checkbox" class="maint-done" ' + (ms.done ? 'checked' : '') + '></div><input type="date" class="maint-actual-date" value="' + (ms.actualDate || '') + '"><div class="maint-actual-dat">' + (actualDat !== null ? actualDat + ' DAT' : '—') + '</div></div>';
+        group.innerHTML = '<div class="maint-planned-row ' + catClass + '"><div class="maint-title-block"><span class="title-text" style="' + (ms.done ? 'text-decoration:line-through;opacity:0.6;' : '') + '">' + ev.title + '</span><span class="tag ' + tagClass + '">' + tagLabel + '</span><span class="tag tag-planned">PLANNED · ' + ev.dat + ' DAT</span><div class="note">' + fmt(plannedDate) + '</div><div class="note">' + ev.note + '</div>' + rainBadgeHtml((ms.actualDate || plannedDate.toISOString().slice(0,10))) + '</div></div><div class="maint-actual-row"><div class="chk-cell"><input type="checkbox" class="maint-done" ' + (ms.done ? 'checked' : '') + '></div><input type="date" class="maint-actual-date" value="' + (ms.actualDate || '') + '"><div class="maint-actual-dat">' + (actualDat !== null ? actualDat + ' DAT' : '—') + '</div></div>';
         group.querySelector('.maint-done').addEventListener('change', function(e) {
           ms.done = e.target.checked;
           if (ms.done && !ms.actualDate) ms.actualDate = todayStr();
@@ -1076,7 +1238,7 @@ function renderMaintenance() {
         const tagLabel = c.type === 'fert' ? 'FERTILIZER' : 'PEST';
         const dat = planting ? daysBetween(planting, c.date) : null;
 
-        group.innerHTML = '<div class="maint-planned-row ' + catClass + '"><div class="maint-title-block"><span class="title-text" style="' + (c.done ? 'text-decoration:line-through;opacity:0.6;' : '') + '">' + c.title + '</span><span class="tag ' + tagClass + '">' + tagLabel + '</span><span class="tag tag-added">ADDED' + (dat !== null ? ' · ' + dat + ' DAT' : '') + '</span><div class="note">' + fmt(new Date(c.date + 'T00:00:00')) + '</div>' + (c.notes ? '<div class="note">' + c.notes + '</div>' : '') + '</div><button class="maint-remove-btn" data-id="' + c.id + '">Remove</button></div><div class="maint-actual-row"><div class="chk-cell"><input type="checkbox" class="maint-custom-done" ' + (c.done ? 'checked' : '') + '></div><input type="date" class="maint-custom-date" value="' + c.date + '"><div class="maint-actual-dat"></div></div>';
+        group.innerHTML = '<div class="maint-planned-row ' + catClass + '"><div class="maint-title-block"><span class="title-text" style="' + (c.done ? 'text-decoration:line-through;opacity:0.6;' : '') + '">' + c.title + '</span><span class="tag ' + tagClass + '">' + tagLabel + '</span><span class="tag tag-added">ADDED' + (dat !== null ? ' · ' + dat + ' DAT' : '') + '</span><div class="note">' + fmt(new Date(c.date + 'T00:00:00')) + '</div>' + (c.notes ? '<div class="note">' + c.notes + '</div>' : '') + rainBadgeHtml(c.date) + '</div><button class="maint-remove-btn" data-id="' + c.id + '">Remove</button></div><div class="maint-actual-row"><div class="chk-cell"><input type="checkbox" class="maint-custom-done" ' + (c.done ? 'checked' : '') + '></div><input type="date" class="maint-custom-date" value="' + c.date + '"><div class="maint-actual-dat"></div></div>';
         group.querySelector('.maint-custom-done').addEventListener('change', function(e) {
           c.done = e.target.checked; saveState(); renderMaintenance(); renderOverview();
         });
@@ -1208,6 +1370,8 @@ function renderDayEvents(events, dateObj) {
 }
 
 loadState();
+loadSettings();
+loadRateLibrary();
 showHome();
 
 if ('serviceWorker' in navigator) {
