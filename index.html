@@ -11,14 +11,16 @@
 <meta name="apple-mobile-web-app-title" content="Trial Calendar">
 <link rel="apple-touch-icon" href="icon-192.png">
 <style>
-  * { box-sizing: border-box; }
-  body { font-family: -apple-system, Segoe UI, Roboto, sans-serif; background:#f4f6f2; margin:0; padding:0; color:#1f2a1f; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body { font-family: -apple-system, Segoe UI, Roboto, sans-serif; background:#f4f6f2; margin:0; padding:0; color:#1f2a1f; padding-bottom:24px; }
   h1 { font-size:1.25em; margin:0; }
-  .header { padding:14px 16px 10px; }
+  .header { padding:14px 16px 10px; display:flex; align-items:center; gap:10px; }
+  .back-btn { background:none; border:none; font-size:1.4em; color:#2e5e2e; cursor:pointer; padding:0 4px 0 0; line-height:1; }
   .sub { color:#556; font-size:0.82em; margin-top:2px; }
+  .ver { color:#aab; font-size:0.68em; text-align:right; padding:2px 16px 0; }
 
-  .tabs { display:flex; position:sticky; top:0; background:#f4f6f2; z-index:10; border-bottom:2px solid #dde3d9; padding:0 8px; }
-  .tab-btn { flex:1; text-align:center; padding:12px 4px; font-size:0.88em; font-weight:600; color:#789; background:none; border:none; border-bottom:3px solid transparent; cursor:pointer; }
+  .tabs { display:flex; position:sticky; top:0; background:#f4f6f2; z-index:10; border-bottom:2px solid #dde3d9; padding:0 8px; overflow-x:auto; }
+  .tab-btn { flex:1; text-align:center; padding:12px 4px; font-size:0.85em; font-weight:600; color:#789; background:none; border:none; border-bottom:3px solid transparent; cursor:pointer; white-space:nowrap; }
   .tab-btn.active { color:#2e5e2e; border-bottom:3px solid #2e5e2e; }
 
   .panel { display:none; padding:14px 16px 24px; }
@@ -28,30 +30,47 @@
   .field { margin-bottom:12px; }
   .field:last-child { margin-bottom:0; }
   .field label { font-weight:600; font-size:0.85em; display:block; margin-bottom:6px; }
-  .field input[type=text], .field input[type=date], .field select {
+  .field input[type=text], .field input[type=date], .field input[type=number], .field select {
     font-size:1em; padding:9px; border-radius:6px; border:1px solid #ccc; width:100%; background:#fff; color:#1f2a1f;
   }
+  .field-hint { font-size:0.75em; color:#889; margin-top:4px; }
+  .section-label { font-weight:700; font-size:0.8em; color:#2e5e2e; text-transform:uppercase; letter-spacing:0.03em; margin:18px 0 8px; }
+  .section-label:first-child { margin-top:0; }
+  .checkbox-row { display:flex; align-items:center; gap:8px; }
+  .checkbox-row input { width:19px; height:19px; }
 
   table { width:100%; border-collapse:collapse; background:#fff; border-radius:10px; overflow:hidden; box-shadow:0 1px 4px rgba(0,0,0,0.08); }
-  th, td { text-align:left; padding:10px 8px; font-size:0.86em; border-bottom:1px solid #eee; }
+  th, td { text-align:left; padding:9px 8px; font-size:0.86em; border-bottom:1px solid #eee; }
   th { background:#2e5e2e; color:#fff; font-weight:600; }
   tr:last-child td { border-bottom:none; }
-  .dat { font-weight:700; color:#2e5e2e; white-space:nowrap; }
+  .dat { font-weight:700; color:#2e5e2e; white-space:nowrap; font-size:0.85em; }
   .date { white-space:nowrap; font-variant-numeric: tabular-nums; }
   .cat-fert { border-left:4px solid #4a8f4a; }
   .cat-pest { border-left:4px solid #c0562e; }
   .cat-assess { border-left:4px solid #3a6ea5; }
-  .tag { display:inline-block; font-size:0.7em; padding:2px 6px; border-radius:4px; margin-left:6px; font-weight:600; white-space:nowrap; }
+  .tag { display:inline-block; font-size:0.68em; padding:2px 6px; border-radius:4px; margin-left:6px; font-weight:600; white-space:nowrap; }
   .tag-fert { background:#e3f1e3; color:#2e5e2e; }
   .tag-pest { background:#fbe6dd; color:#a3441d; }
   .tag-assess { background:#e2ecf7; color:#2a5580; }
-  .note { font-size:0.78em; color:#667; margin-top:2px; }
+  .tag-planned { background:#eef0f4; color:#556; }
+  .tag-added { background:#e6ecfa; color:#2f4a8a; }
+  .note { font-size:0.76em; color:#667; margin-top:2px; line-height:1.4; }
   .today-row { outline:2px solid #d9a441; outline-offset:-2px; }
   .chk-cell { text-align:center; width:34px; }
   .chk-cell input { width:19px; height:19px; cursor:pointer; }
-  tr.done td { opacity:0.45; }
+  tr.done td { opacity:0.5; }
   tr.done .title-text { text-decoration: line-through; }
   .progress { font-size:0.8em; color:#556; margin:8px 2px 4px; text-align:right; }
+
+  .maint-group { background:#fff; border-radius:10px; box-shadow:0 1px 4px rgba(0,0,0,0.08); margin-bottom:10px; overflow:hidden; }
+  .maint-planned-row { display:flex; align-items:flex-start; gap:8px; padding:10px 10px 6px; border-left:4px solid transparent; }
+  .maint-planned-row.cat-fert { border-left-color:#4a8f4a; }
+  .maint-planned-row.cat-pest { border-left-color:#c0562e; }
+  .maint-actual-row { display:flex; align-items:center; gap:8px; padding:8px 10px 10px 14px; background:#fafbf8; border-top:1px dashed #e3e8df; }
+  .maint-actual-row input[type=date] { flex:1; font-size:0.85em; padding:7px; border-radius:6px; border:1px solid #ccc; }
+  .maint-actual-dat { font-size:0.75em; color:#8a6410; font-weight:700; white-space:nowrap; min-width:52px; }
+  .maint-title-block { flex:1; min-width:0; }
+  .maint-remove-btn { background:none; border:none; color:#a3441d; font-size:0.75em; font-weight:600; cursor:pointer; padding:2px 4px; }
 
   .app-row { display:flex; gap:10px; align-items:flex-end; margin-bottom:10px; flex-wrap:wrap; }
   .app-row .field { flex:1; min-width:140px; margin-bottom:0; }
@@ -59,123 +78,423 @@
   .app-block h3 { margin:0 0 10px; font-size:0.95em; color:#2e5e2e; }
   .remove-btn { background:#fbe6dd; color:#a3441d; border:none; border-radius:6px; padding:8px 10px; font-size:0.8em; font-weight:600; cursor:pointer; }
   .add-btn { display:block; width:100%; background:#2e5e2e; color:#fff; border:none; border-radius:8px; padding:12px; font-size:0.9em; font-weight:600; cursor:pointer; margin-top:6px; }
+  .add-btn.secondary { background:#fff; color:#2e5e2e; border:2px solid #2e5e2e; }
   .assess-note { font-size:0.78em; color:#667; margin-top:4px; }
 
   footer { font-size:0.72em; color:#889; margin-top:14px; text-align:center; padding: 0 16px 20px; }
+
+  .home-wrap { padding:14px 16px; }
+  .home-nav-row { display:flex; gap:10px; margin-bottom:14px; }
+  .home-nav-btn { flex:1; background:#fff; border:1px solid #dde3d9; border-radius:10px; padding:12px 8px; text-align:center; font-size:0.82em; font-weight:600; color:#2e5e2e; cursor:pointer; }
+  .trial-card { background:#fff; border-radius:12px; padding:14px; box-shadow:0 1px 4px rgba(0,0,0,0.08); margin-bottom:12px; display:flex; align-items:center; gap:12px; cursor:pointer; }
+  .trial-icon { font-size:1.8em; width:44px; height:44px; display:flex; align-items:center; justify-content:center; background:#e3f1e3; border-radius:10px; flex-shrink:0; }
+  .trial-info { flex:1; min-width:0; }
+  .trial-name { font-weight:700; font-size:1em; color:#1f2a1f; }
+  .trial-meta { font-size:0.78em; color:#667; margin-top:2px; }
+  .trial-arrow { color:#aab; font-size:1.2em; }
+  .empty-state { text-align:center; color:#889; padding:40px 20px; font-size:0.9em; }
+  .new-trial-btn { display:block; width:100%; background:#2e5e2e; color:#fff; border:none; border-radius:10px; padding:14px; font-size:0.95em; font-weight:700; cursor:pointer; margin-top:6px; }
+  .crop-picker { display:grid; grid-template-columns: repeat(3, 1fr); gap:10px; margin-bottom:14px; }
+  .crop-opt { background:#fff; border:2px solid #e3e8df; border-radius:10px; padding:14px 6px; text-align:center; cursor:pointer; font-size:0.82em; font-weight:600; color:#445; }
+  .crop-opt.selected { border-color:#2e5e2e; background:#e3f1e3; color:#2e5e2e; }
+  .crop-opt .emoji { font-size:1.6em; display:block; margin-bottom:4px; }
+  .delete-trial-btn { background:#fbe6dd; color:#a3441d; border:none; border-radius:8px; padding:12px; font-size:0.85em; font-weight:600; cursor:pointer; width:100%; margin-top:4px; }
+
+  .cal-nav { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+  .cal-nav button { background:#fff; border:1px solid #ccd; border-radius:8px; width:36px; height:36px; font-size:1.1em; color:#2e5e2e; cursor:pointer; }
+  .cal-nav .cal-title { font-weight:700; font-size:1em; }
+  .cal-grid { display:grid; grid-template-columns: repeat(7, 1fr); gap:4px; background:#fff; border-radius:10px; padding:10px; box-shadow:0 1px 4px rgba(0,0,0,0.08); margin-bottom:14px; }
+  .cal-dow { text-align:center; font-size:0.68em; font-weight:700; color:#889; padding-bottom:4px; }
+  .cal-day { aspect-ratio:1; display:flex; flex-direction:column; align-items:center; justify-content:center; border-radius:8px; font-size:0.78em; position:relative; color:#334; }
+  .cal-day.blank { visibility:hidden; }
+  .cal-day.has-event { background:#e3f1e3; font-weight:700; color:#2e5e2e; }
+  .cal-day.is-today { outline:2px solid #d9a441; }
+  .cal-day .dot-row { display:flex; gap:2px; margin-top:2px; }
+  .cal-dot { width:5px; height:5px; border-radius:50%; }
+  .dot-fert { background:#4a8f4a; }
+  .dot-pest { background:#c0562e; }
+  .dot-assess { background:#3a6ea5; }
+  .day-events { background:#fff; border-radius:10px; padding:4px; box-shadow:0 1px 4px rgba(0,0,0,0.08); }
+  .day-events .none { text-align:center; color:#aab; font-size:0.85em; padding:16px; }
+
+  .rate-entry { background:#fff; border-radius:10px; padding:12px; box-shadow:0 1px 4px rgba(0,0,0,0.08); margin-bottom:10px; }
+  .rate-entry-head { display:flex; justify-content:space-between; align-items:flex-start; gap:8px; }
+  .rate-entry-name { font-weight:700; font-size:0.95em; }
+  .rate-entry-row { font-size:0.8em; color:#556; margin-top:2px; }
+  .rate-entry-row b { color:#1f2a1f; }
 </style>
 </head>
 <body>
 
 <div class="header">
-  <h1>🌾 Trial Calendar</h1>
-  <div class="sub" id="header-sub">Set up your trial details to begin</div>
+  <button class="back-btn" id="back-btn" style="display:none;">‹</button>
+  <div>
+    <h1 id="app-title">🌾 Trial Calendar</h1>
+    <div class="sub" id="header-sub">All your active trials</div>
+  </div>
+</div>
+<div class="ver" id="app-version">v1.2</div>
+
+<div id="view-home" class="home-wrap">
+  <div class="home-nav-row">
+    <div class="home-nav-btn" id="go-rates-btn">Rate Reference</div>
+    <div class="home-nav-btn" id="go-archived-btn">Archived</div>
+  </div>
+  <div id="trial-list"></div>
+  <button class="new-trial-btn" id="new-trial-btn">+ New Trial</button>
 </div>
 
-<div class="tabs">
-  <button class="tab-btn active" data-tab="details">Details</button>
-  <button class="tab-btn" data-tab="application">Application</button>
-  <button class="tab-btn" data-tab="maintenance">Maintenance</button>
-</div>
-
-<!-- TAB 1: DETAILS -->
-<div class="panel active" id="panel-details">
+<div id="view-new" class="home-wrap" style="display:none;">
   <div class="card">
     <div class="field">
-      <label for="d-crop">Crop</label>
-      <input type="text" id="d-crop" placeholder="e.g. Rice">
+      <label>Choose Crop</label>
+      <div class="crop-picker" id="crop-picker"></div>
     </div>
     <div class="field">
-      <label for="d-variety">Variety</label>
-      <input type="text" id="d-variety" placeholder="e.g. RC160, Co39">
+      <label for="nt-variety">Variety (optional)</label>
+      <input type="text" id="nt-variety" placeholder="e.g. RC160, Co39">
     </div>
     <div class="field">
-      <label for="d-sowing">Seedling Sowing Date</label>
-      <input type="date" id="d-sowing">
-    </div>
-    <div class="field">
-      <label for="d-planting">Planting / Transplanting Date (0 DAT)</label>
-      <input type="date" id="d-planting">
-    </div>
-    <div class="field">
-      <label for="d-trial">Trial Type</label>
-      <select id="d-trial">
+      <label for="nt-trial">Trial Type</label>
+      <select id="nt-trial">
         <option value="">— Select —</option>
         <option value="Insecticide">Insecticide</option>
         <option value="Herbicide">Herbicide</option>
         <option value="Fungicide">Fungicide</option>
       </select>
     </div>
+    <button class="add-btn" id="create-trial-btn">Create Trial</button>
   </div>
 </div>
 
-<!-- TAB 2: APPLICATION -->
-<div class="panel" id="panel-application">
-  <div class="card">
-    <div id="app-blocks"></div>
-    <button class="add-btn" id="add-app-btn">+ Add Application</button>
+<div id="view-rates" class="home-wrap" style="display:none;">
+  <div class="tabs" style="position:static; margin:0 0 14px; border-radius:10px; background:#fff; box-shadow:0 1px 4px rgba(0,0,0,0.08); overflow:hidden;">
+    <button class="tab-btn rate-tab-btn active" data-rate-cat="insecticide">Insecticide</button>
+    <button class="tab-btn rate-tab-btn" data-rate-cat="herbicide">Herbicide</button>
+    <button class="tab-btn rate-tab-btn" data-rate-cat="fungicide">Fungicide</button>
   </div>
 
-  <table id="app-table" style="margin-top:14px;">
-    <thead>
-      <tr><th class="chk-cell">✓</th><th>Day</th><th>Date</th><th>Activity</th></tr>
-    </thead>
-    <tbody id="app-body"></tbody>
-  </table>
-  <div class="progress" id="app-progress"></div>
+  <div id="rates-cat-list"></div>
+  <button class="add-btn secondary" id="add-rate-btn">+ Add Rate</button>
+
+  <div class="card" id="rate-form-card" style="display:none; margin-top:14px;">
+    <div class="field">
+      <label>Category</label>
+      <select id="rf-category">
+        <option value="insecticide">Insecticide</option>
+        <option value="herbicide">Herbicide</option>
+        <option value="fungicide">Fungicide</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Product Name</label>
+      <input type="text" id="rf-name" placeholder="e.g. Incipio">
+    </div>
+    <div class="field" id="rf-target-pest-field">
+      <label>Target Pest / Disease / Weed</label>
+      <input type="text" id="rf-target-pest" placeholder="e.g. Stemborer, other Lepidopterans">
+    </div>
+    <div class="field">
+      <label>Rate per Tank (ml)</label>
+      <input type="text" id="rf-rate-tank" placeholder="e.g. 20 ml / 16L tank">
+    </div>
+    <div class="field">
+      <label>Rate per ha (ml)</label>
+      <input type="text" id="rf-rate-ha" placeholder="e.g. 500 ml/ha">
+    </div>
+    <div class="field">
+      <label>Application Timing</label>
+      <input type="text" id="rf-timing" placeholder="e.g. PI stage, 7/14/21 DAT rotation">
+    </div>
+    <button class="add-btn" id="rf-save-btn">Save Rate</button>
+  </div>
 </div>
 
-<!-- TAB 3: MAINTENANCE -->
-<div class="panel" id="panel-maintenance">
-  <table>
-    <thead>
-      <tr><th class="chk-cell">✓</th><th>DAT</th><th>Date</th><th>Activity</th></tr>
-    </thead>
-    <tbody id="maint-body"></tbody>
-  </table>
-  <div class="progress" id="maint-progress"></div>
-  <footer>Maintenance dates are based on Planting Date set in the Details tab.</footer>
+<div id="view-archived" class="home-wrap" style="display:none;">
+  <div id="archived-list"></div>
+</div>
+
+
+<div id="view-trial" style="display:none;">
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="overview">Overview</button>
+    <button class="tab-btn" data-tab="details">Details</button>
+    <button class="tab-btn" data-tab="application">Application</button>
+    <button class="tab-btn" data-tab="maintenance">Maintenance</button>
+  </div>
+
+  <div class="panel active" id="panel-overview">
+    <div class="cal-nav">
+      <button id="cal-prev">‹</button>
+      <div class="cal-title" id="cal-title"></div>
+      <button id="cal-next">›</button>
+    </div>
+    <div class="cal-grid" id="cal-grid"></div>
+    <div class="day-events" id="day-events"></div>
+  </div>
+
+  <div class="panel" id="panel-details">
+    <div class="card">
+      <div class="field">
+        <label for="d-title">Trial Title (optional)</label>
+        <input type="text" id="d-title" placeholder="e.g. My custom label for this trial">
+        <div class="field-hint">Shown on the home screen instead of the crop name, if filled in.</div>
+      </div>
+      <div class="field">
+        <label for="d-crop">Crop</label>
+        <input type="text" id="d-crop" placeholder="e.g. Rice">
+      </div>
+      <div class="field">
+        <label for="d-variety">Variety</label>
+        <input type="text" id="d-variety" placeholder="e.g. RC160, Co39">
+      </div>
+      <div class="field">
+        <label for="d-planting-distance">Planting Distance (cm)</label>
+        <input type="text" id="d-planting-distance" placeholder="e.g. 20 x 20 cm">
+      </div>
+      <div class="field">
+        <label for="d-sowing">Seedling Sowing Date</label>
+        <input type="date" id="d-sowing">
+      </div>
+      <div class="field">
+        <label for="d-planting">Planting / Transplanting Date (0 DAT)</label>
+        <input type="date" id="d-planting">
+      </div>
+      <div class="field">
+        <label for="d-trial">Trial Type</label>
+        <select id="d-trial">
+          <option value="">— Select —</option>
+          <option value="Insecticide">Insecticide</option>
+          <option value="Herbicide">Herbicide</option>
+          <option value="Fungicide">Fungicide</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="card" id="rice-rate-card" style="display:none;">
+      <div class="section-label">Fertilizer program</div>
+      <div class="field">
+        <label for="d-rate">Recommended Rate (NPK)</label>
+        <select id="d-rate">
+          <option value="wet">Wet season — 90-40-90</option>
+          <option value="dry">Dry season — 120-60-120</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="d-total-area">Total Area (sqm)</label>
+        <input type="number" id="d-total-area" placeholder="e.g. 1000" min="0" step="any">
+      </div>
+      <div class="field">
+        <label for="d-plot-size">Plot Size (sqm)</label>
+        <input type="number" id="d-plot-size" placeholder="e.g. 4" min="0" step="any">
+        <div class="field-hint">Fertilizer amounts in the Maintenance tab are computed from these values.</div>
+      </div>
+    </div>
+
+    <button class="delete-trial-btn" id="delete-trial-btn">Delete This Trial</button>
+  </div>
+
+  <div class="panel" id="panel-application">
+    <div class="card">
+      <div id="app-blocks"></div>
+      <button class="add-btn" id="add-app-btn">+ Add Application</button>
+    </div>
+
+    <table id="app-table" style="margin-top:14px;">
+      <thead>
+        <tr><th class="chk-cell">✓</th><th>Day</th><th>Date</th><th>Activity</th></tr>
+      </thead>
+      <tbody id="app-body"></tbody>
+    </table>
+    <div class="progress" id="app-progress"></div>
+  </div>
+
+  <div class="panel" id="panel-maintenance">
+    <div id="maint-list"></div>
+    <div class="progress" id="maint-progress"></div>
+
+    <div class="card" id="maint-add-card" style="display:none; margin-top:10px;">
+      <div class="field">
+        <label>Type</label>
+        <select id="ma-type">
+          <option value="pest">Pest</option>
+          <option value="fert">Fertilizer</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Product / Activity Name</label>
+        <input type="text" id="ma-name" placeholder="e.g. Fungicide spray">
+      </div>
+      <div class="field">
+        <label>Date</label>
+        <input type="date" id="ma-date">
+      </div>
+      <div class="field">
+        <label>Details / Notes</label>
+        <input type="text" id="ma-notes" placeholder="e.g. wet season — near PI, 20ml per 16L">
+      </div>
+      <div class="field checkbox-row">
+        <input type="checkbox" id="ma-done">
+        <label for="ma-done" style="margin:0;">Mark as already done</label>
+      </div>
+      <div class="field">
+        <label>Repeat</label>
+        <select id="ma-repeat">
+          <option value="0">No repeat</option>
+          <option value="3">Every 3 days</option>
+          <option value="7">Every 7 days</option>
+          <option value="14">Every 14 days</option>
+        </select>
+      </div>
+      <div class="field" id="ma-repeat-count-field" style="display:none;">
+        <label>Number of repeats</label>
+        <input type="number" id="ma-repeat-count" value="3" min="1" max="20">
+      </div>
+      <button class="add-btn" id="ma-save-btn">Add to Schedule</button>
+    </div>
+    <button class="add-btn secondary" id="maint-add-toggle-btn" style="margin-top:10px;">+ Add Item</button>
+
+    <footer id="maint-footer">Planned dates are based on Planting Date. Actual DAT recomputes from the date you log.</footer>
+  </div>
 </div>
 
 <script>
-const STORAGE_KEY = 'trial-calendar-state-v1';
+const APP_VERSION = '1.3';
+const STORAGE_KEY = 'trial-calendar-state-v3';
 
-// ---------- Default data ----------
-const defaultState = {
-  details: { crop: 'Rice', variety: 'RC160 / Co39', sowing: '', planting: new Date().toISOString().slice(0,10), trialType: '' },
-  applications: [
-    { id:'a1', label:'A', date: new Date().toISOString().slice(0,10), doneApp:false, assess:{1:false,3:false,7:false} }
-  ],
-  maintenance: [
-    { id:'m1', dat: 0,  type: 'fert', title: 'Complete (14-14-14)', note: '14.3 kg / 1000 m² · 28.6 kg/0.1ha', done:false },
-    { id:'m2', dat: 14, type: 'fert', title: 'Complete (14-14-14)', note: '14.3 kg / 1000 m²', done:false },
-    { id:'m3', dat: 28, type: 'fert', title: 'Urea (46-0-0)', note: '5.4 kg / 1000 m²', done:false },
-    { id:'m4', dat: 35, type: 'fert', title: 'Urea (46-0-0)', note: '5.5 kg / 1000 m² — timed before PI', done:false },
-    { id:'m5', dat: 38, type: 'fert', title: 'Muriate of Potash (0-0-60)', note: '8.3 kg / 1000 m² — near PI, shifted from 50 DAT', done:false },
-    { id:'m6', dat: 38, type: 'pest', title: 'Stem borer spray (PI timing)', note: 'Targets whitehead-causing generation — confirm w/ egg mass scouting', done:false },
-    { id:'m7', dat: 25, type: 'fert', title: 'Tillermaxx', note: '5 ml per 16 L water (foliar)', done:false },
-    { id:'m8', dat: 7,  type: 'pest', title: 'Incipio', note: 'Deadhearts control', done:false },
-    { id:'m9', dat: 14, type: 'pest', title: 'Incipio', note: 'Deadhearts control', done:false },
-    { id:'m10', dat: 21, type: 'pest', title: 'Prevathon', note: 'Rotate MoA to break resistance', done:false },
-  ]
+const CROPS = [
+  { key: 'rice', label: 'Rice', emoji: '🌾' },
+  { key: 'corn', label: 'Corn', emoji: '🌽' },
+  { key: 'eggplant', label: 'Eggplant', emoji: '🍆' },
+  { key: 'tomato', label: 'Tomato', emoji: '🍅' },
+  { key: 'cucumber', label: 'Cucumber', emoji: '🥒' },
+  { key: 'other', label: 'Other', emoji: '🌱' },
+];
+function cropMeta(key) { return CROPS.find(c => c.key === key) || CROPS[CROPS.length - 1]; }
+function displayTitle(t) { return (t.details.title && t.details.title.trim()) ? t.details.title.trim() : t.details.crop; }
+
+const RICE_RATES = {
+  wet: { label: 'Wet season — 90-40-90', N: 90, P: 40, K: 90 },
+  dry: { label: 'Dry season — 120-60-120', N: 120, P: 60, K: 120 }
 };
 
-let state = JSON.parse(JSON.stringify(defaultState));
+function round(n, d) { return Math.round(n * Math.pow(10, d)) / Math.pow(10, d); }
+
+function riceFixedItems() {
+  return [
+    { id:'stemborer', dat: 38, type: 'pest', title: 'Stem borer spray (PI timing)', note: 'Targets whitehead-causing generation — confirm w/ egg mass scouting' },
+    { id:'tillermaxx', dat: 25, type: 'fert', title: 'Tillermaxx', note: '5 ml per 16 L water (foliar)' },
+    { id:'incipio1', dat: 7, type: 'pest', title: 'Incipio', note: 'Deadhearts control' },
+    { id:'incipio2', dat: 14, type: 'pest', title: 'Incipio', note: 'Deadhearts control' },
+    { id:'prevathon', dat: 21, type: 'pest', title: 'Prevathon', note: 'Rotate MoA to break resistance' },
+  ];
+}
+
+function riceFertItems(rateKey, totalAreaSqm, plotSizeSqm) {
+  const r = RICE_RATES[rateKey] || RICE_RATES.wet;
+  const completeKgHa = r.P / 0.14;
+  const ureaKgHa = (r.N - r.P) / 0.46;
+  const potashKgHa = (r.K - r.P) / 0.60;
+
+  const hasArea = totalAreaSqm > 0;
+  const hasPlot = plotSizeSqm > 0;
+  const totalHa = hasArea ? totalAreaSqm / 10000 : null;
+  const plotHa = hasPlot ? plotSizeSqm / 10000 : null;
+
+  function noteFor(kgHaHalf, label) {
+    let n = round(kgHaHalf,2) + ' kg/ha';
+    if (hasArea) n += ' · ' + round(kgHaHalf * totalHa, 2) + ' kg total area';
+    if (hasPlot) n += ' · ' + round(kgHaHalf * plotHa, 3) + ' kg/plot';
+    if (!hasArea && !hasPlot) n += ' · set Total Area & Plot Size in Details to compute';
+    return label + ' — ' + n;
+  }
+
+  return [
+    { id:'complete1', dat: 0,  type: 'fert', title: 'Complete (14-14-14)', note: noteFor(completeKgHa/2, r.label) },
+    { id:'complete2', dat: 14, type: 'fert', title: 'Complete (14-14-14)', note: noteFor(completeKgHa/2, r.label) },
+    { id:'urea1', dat: 28, type: 'fert', title: 'Urea (46-0-0)', note: noteFor(ureaKgHa/2, r.label) },
+    { id:'urea2', dat: 35, type: 'fert', title: 'Urea (46-0-0)', note: noteFor(ureaKgHa/2, r.label + ' — before PI') },
+    { id:'potash', dat: 38, type: 'fert', title: 'Muriate of Potash (0-0-60)', note: noteFor(potashKgHa, r.label + ' — near PI') },
+  ];
+}
+
+function computePlannedItems(trial) {
+  if (trial.details.cropKey !== 'rice') return [];
+  const d = trial.details;
+  const fertItems = riceFertItems(d.rateKey || 'wet', parseFloat(d.totalAreaSqm) || 0, parseFloat(d.plotSizeSqm) || 0);
+  return fertItems.concat(riceFixedItems());
+}
+
+function todayStr() { return new Date().toISOString().slice(0,10); }
+
+function makeTrial(cropKey, variety, trialType) {
+  const meta = cropMeta(cropKey);
+  return {
+    id: 't' + Date.now(),
+    details: {
+      title: '', crop: meta.label, cropKey: cropKey, variety: variety || '', sowing: '', planting: todayStr(), trialType: trialType || '',
+      plantingDistance: '', rateKey: 'wet', totalAreaSqm: '', plotSizeSqm: ''
+    },
+    applications: [
+      { id:'a1', label:'A', date: todayStr(), doneApp:false, assess:{1:false,3:false,7:false} }
+    ],
+    maintenanceState: {},
+    customMaintenance: [],
+    archived: false
+  };
+}
+
+let state = { trials: [], currentTrialId: null };
+const RATES_STORAGE_KEY = 'trial-calendar-rate-library-v1'; // isolated key — untouched by trial-data structure changes
+let rateLibrary = { insecticide: [], herbicide: [], fungicide: [] };
+
+function loadRateLibrary() {
+  try {
+    const raw = localStorage.getItem(RATES_STORAGE_KEY);
+    if (raw) {
+      const saved = JSON.parse(raw);
+      if (saved) {
+        rateLibrary.insecticide = saved.insecticide || [];
+        rateLibrary.herbicide = saved.herbicide || [];
+        rateLibrary.fungicide = saved.fungicide || [];
+      }
+    }
+  } catch (e) { }
+}
+function saveRateLibrary() {
+  try { localStorage.setItem(RATES_STORAGE_KEY, JSON.stringify(rateLibrary)); }
+  catch (e) { console.error('Rate library save failed', e); }
+}
 
 function loadState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const saved = JSON.parse(raw);
-      state = Object.assign({}, defaultState, saved);
-      if (!state.applications || !state.applications.length) state.applications = defaultState.applications;
-      if (!state.maintenance || !state.maintenance.length) state.maintenance = defaultState.maintenance;
+      if (saved && Array.isArray(saved.trials)) {
+        state = { trials: saved.trials, currentTrialId: saved.currentTrialId || null };
+        state.trials.forEach(function(t) {
+          if (!t.customMaintenance) t.customMaintenance = [];
+          if (typeof t.details.title !== 'string') t.details.title = '';
+          if (typeof t.details.plantingDistance !== 'string') t.details.plantingDistance = '';
+          if (typeof t.archived !== 'boolean') t.archived = false;
+        });
+      }
     }
-  } catch (e) { /* ignore */ }
+  } catch (e) { }
 }
-
 function saveState() {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
   catch (e) { console.error('Save failed', e); }
+}
+
+function currentTrial() {
+  return state.trials.find(function(t) { return t.id === state.currentTrialId; }) || null;
+}
+function maintState(trial, itemId) {
+  if (!trial.maintenanceState) trial.maintenanceState = {};
+  if (!trial.maintenanceState[itemId]) trial.maintenanceState[itemId] = { done: false, actualDate: null };
+  return trial.maintenanceState[itemId];
 }
 
 function fmt(d) {
@@ -190,73 +509,381 @@ function addDays(baseStr, n) {
   d.setDate(d.getDate() + n);
   return d;
 }
+function addDaysToDateStr(dateStr, n) {
+  const d = new Date(dateStr + 'T00:00:00');
+  d.setDate(d.getDate() + n);
+  return d.toISOString().slice(0,10);
+}
+function daysBetween(baseStr, dateStr) {
+  const a = new Date(baseStr + 'T00:00:00');
+  const b = new Date(dateStr + 'T00:00:00');
+  return Math.round((b - a) / 86400000);
+}
+function sameDay(a, b) {
+  return a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate();
+}
 
-// ---------- Tabs ----------
-document.querySelectorAll('.tab-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+const viewHome = document.getElementById('view-home');
+const viewNew = document.getElementById('view-new');
+const viewRates = document.getElementById('view-rates');
+const viewArchived = document.getElementById('view-archived');
+const viewTrial = document.getElementById('view-trial');
+const backBtn = document.getElementById('back-btn');
+const appTitle = document.getElementById('app-title');
+const headerSub = document.getElementById('header-sub');
+
+document.getElementById('app-version').textContent = 'v' + APP_VERSION;
+
+function hideAllViews() {
+  viewHome.style.display = 'none';
+  viewNew.style.display = 'none';
+  viewRates.style.display = 'none';
+  viewArchived.style.display = 'none';
+  viewTrial.style.display = 'none';
+}
+
+function showHome() {
+  state.currentTrialId = null;
+  saveState();
+  hideAllViews();
+  viewHome.style.display = 'block';
+  backBtn.style.display = 'none';
+  appTitle.textContent = '🌾 Trial Calendar';
+  headerSub.textContent = 'All your active trials';
+  renderHome();
+}
+
+function showNewTrial() {
+  hideAllViews();
+  viewNew.style.display = 'block';
+  backBtn.style.display = 'inline-block';
+  appTitle.textContent = 'New Trial';
+  headerSub.textContent = 'Set up a new trial';
+  renderCropPicker();
+}
+
+let currentRateCat = 'insecticide';
+function showRates() {
+  hideAllViews();
+  viewRates.style.display = 'block';
+  backBtn.style.display = 'inline-block';
+  appTitle.textContent = 'Rate Reference';
+  headerSub.textContent = 'Saved separately — not affected by app updates';
+  document.getElementById('rate-form-card').style.display = 'none';
+  renderRatesList();
+}
+
+function showArchived() {
+  hideAllViews();
+  viewArchived.style.display = 'block';
+  backBtn.style.display = 'inline-block';
+  appTitle.textContent = 'Archived Trials';
+  headerSub.textContent = 'Hidden from your home screen';
+  renderArchivedList();
+}
+
+function showTrial(id) {
+  state.currentTrialId = id;
+  saveState();
+  hideAllViews();
+  viewTrial.style.display = 'block';
+  backBtn.style.display = 'inline-block';
+  const t = currentTrial();
+  const meta = cropMeta(t.details.cropKey);
+  appTitle.textContent = meta.emoji + ' ' + displayTitle(t);
+  updateHeaderSub();
+  document.querySelectorAll('.tab-btn:not(.rate-tab-btn)').forEach(function(b) { b.classList.remove('active'); });
+  document.querySelector('.tab-btn[data-tab="overview"]').classList.add('active');
+  document.querySelectorAll('.panel').forEach(function(p) { p.classList.remove('active'); });
+  document.getElementById('panel-overview').classList.add('active');
+  renderDetails();
+  renderApplication();
+  renderMaintenance();
+  calMonthOffset = 0;
+  renderOverview();
+}
+
+backBtn.addEventListener('click', showHome);
+document.getElementById('new-trial-btn').addEventListener('click', showNewTrial);
+document.getElementById('go-rates-btn').addEventListener('click', showRates);
+document.getElementById('go-archived-btn').addEventListener('click', showArchived);
+
+const trialList = document.getElementById('trial-list');
+function attachLongPress(el, onLongPress) {
+  let timer = null;
+  let fired = false;
+  function start(e) {
+    fired = false;
+    timer = setTimeout(function() { fired = true; onLongPress(); }, 550);
+  }
+  function cancel() { if (timer) clearTimeout(timer); }
+  el.addEventListener('touchstart', start, { passive: true });
+  el.addEventListener('touchend', cancel);
+  el.addEventListener('touchmove', cancel);
+  el.addEventListener('mousedown', start);
+  el.addEventListener('mouseup', cancel);
+  el.addEventListener('mouseleave', cancel);
+  el.addEventListener('click', function(e) { if (fired) { e.preventDefault(); e.stopPropagation(); fired = false; } });
+}
+
+function renderHome() {
+  trialList.innerHTML = '';
+  const active = state.trials.filter(function(t) { return !t.archived; });
+  if (!active.length) {
+    trialList.innerHTML = '<div class="empty-state">No active trials yet.<br>Tap "+ New Trial" to get started.</div>';
+    return;
+  }
+  active.forEach(function(t) {
+    const meta = cropMeta(t.details.cropKey);
+    const div = document.createElement('div');
+    div.className = 'trial-card';
+    const metaParts = [];
+    if (t.details.variety) metaParts.push(t.details.variety);
+    if (t.details.trialType) metaParts.push(t.details.trialType + ' Trial');
+    metaParts.push('Planted ' + (t.details.planting || '—'));
+    div.innerHTML = '<div class="trial-icon">' + meta.emoji + '</div><div class="trial-info"><div class="trial-name">' + displayTitle(t) + '</div><div class="trial-meta">' + metaParts.join(' · ') + '</div></div><div class="trial-arrow">›</div>';
+    div.addEventListener('click', function() { showTrial(t.id); });
+    attachLongPress(div, function() {
+      if (confirm('Archive "' + displayTitle(t) + '"? It will be hidden from your home screen. You can restore it from Archived.')) {
+        t.archived = true;
+        saveState();
+        renderHome();
+      }
+    });
+    trialList.appendChild(div);
+  });
+}
+
+function renderArchivedList() {
+  const list = document.getElementById('archived-list');
+  list.innerHTML = '';
+  const archived = state.trials.filter(function(t) { return t.archived; });
+  if (!archived.length) {
+    list.innerHTML = '<div class="empty-state">No archived trials.</div>';
+    return;
+  }
+  archived.forEach(function(t) {
+    const meta = cropMeta(t.details.cropKey);
+    const div = document.createElement('div');
+    div.className = 'trial-card';
+    const metaParts = [];
+    if (t.details.variety) metaParts.push(t.details.variety);
+    metaParts.push('Planted ' + (t.details.planting || '—'));
+    div.innerHTML = '<div class="trial-icon">' + meta.emoji + '</div><div class="trial-info"><div class="trial-name">' + displayTitle(t) + '</div><div class="trial-meta">' + metaParts.join(' · ') + '</div></div>';
+    const unarchiveBtn = document.createElement('button');
+    unarchiveBtn.className = 'remove-btn';
+    unarchiveBtn.textContent = 'Unarchive';
+    unarchiveBtn.addEventListener('click', function() {
+      t.archived = false;
+      saveState();
+      renderArchivedList();
+    });
+    div.appendChild(unarchiveBtn);
+    list.appendChild(div);
+  });
+}
+
+const cropPicker = document.getElementById('crop-picker');
+let selectedCropKey = 'rice';
+function renderCropPicker() {
+  cropPicker.innerHTML = '';
+  CROPS.forEach(function(c) {
+    const div = document.createElement('div');
+    div.className = 'crop-opt' + (c.key === selectedCropKey ? ' selected' : '');
+    div.innerHTML = '<span class="emoji">' + c.emoji + '</span>' + c.label;
+    div.addEventListener('click', function() { selectedCropKey = c.key; renderCropPicker(); });
+    cropPicker.appendChild(div);
+  });
+}
+document.getElementById('create-trial-btn').addEventListener('click', function() {
+  const variety = document.getElementById('nt-variety').value;
+  const trialType = document.getElementById('nt-trial').value;
+  const trial = makeTrial(selectedCropKey, variety, trialType);
+  state.trials.push(trial);
+  saveState();
+  document.getElementById('nt-variety').value = '';
+  document.getElementById('nt-trial').value = '';
+  selectedCropKey = 'rice';
+  showTrial(trial.id);
+});
+
+const ratesCatList = document.getElementById('rates-cat-list');
+const rateFormCard = document.getElementById('rate-form-card');
+const rfCategory = document.getElementById('rf-category');
+const rfTargetPestField = document.getElementById('rf-target-pest-field');
+
+document.querySelectorAll('.rate-tab-btn').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('.rate-tab-btn').forEach(function(b) { b.classList.remove('active'); });
     btn.classList.add('active');
-    document.getElementById('panel-' + btn.dataset.tab).classList.add('active');
+    currentRateCat = btn.dataset.rateCat;
+    rateFormCard.style.display = 'none';
+    renderRatesList();
   });
 });
 
-// ---------- TAB 1: Details ----------
+function toggleTargetPestField() {
+  rfTargetPestField.style.display = 'block';
+}
+rfCategory.addEventListener('change', toggleTargetPestField);
+
+function openRateForm() {
+  rateFormCard.style.display = 'block';
+  rfCategory.value = currentRateCat;
+  toggleTargetPestField();
+  document.getElementById('rf-name').value = '';
+  document.getElementById('rf-target-pest').value = '';
+  document.getElementById('rf-rate-tank').value = '';
+  document.getElementById('rf-rate-ha').value = '';
+  document.getElementById('rf-timing').value = '';
+  rateFormCard.scrollIntoView({ behavior:'smooth', block:'nearest' });
+}
+document.getElementById('add-rate-btn').addEventListener('click', openRateForm);
+
+document.getElementById('rf-save-btn').addEventListener('click', function() {
+  const category = rfCategory.value;
+  const name = document.getElementById('rf-name').value.trim();
+  if (!name) { alert('Enter a product name first.'); return; }
+  const entry = {
+    id: 'r' + Date.now(),
+    name: name,
+    targetPest: document.getElementById('rf-target-pest').value.trim(),
+    rateTank: document.getElementById('rf-rate-tank').value.trim(),
+    rateHa: document.getElementById('rf-rate-ha').value.trim(),
+    timing: document.getElementById('rf-timing').value.trim()
+  };
+  if (!rateLibrary[category]) rateLibrary[category] = [];
+  rateLibrary[category].push(entry);
+  saveRateLibrary();
+  rateFormCard.style.display = 'none';
+  currentRateCat = category;
+  document.querySelectorAll('.rate-tab-btn').forEach(function(b) { b.classList.toggle('active', b.dataset.rateCat === category); });
+  renderRatesList();
+});
+
+function renderRatesList() {
+  ratesCatList.innerHTML = '';
+  const items = rateLibrary[currentRateCat] || [];
+  if (!items.length) {
+    ratesCatList.innerHTML = '<div class="empty-state" style="padding:16px;">No ' + currentRateCat + ' rates saved yet.</div>';
+    return;
+  }
+  items.forEach(function(e) {
+    const div = document.createElement('div');
+    div.className = 'rate-entry';
+    let rows = '';
+    if (e.targetPest) rows += '<div class="rate-entry-row"><b>Target:</b> ' + e.targetPest + '</div>';
+    if (e.rateTank) rows += '<div class="rate-entry-row"><b>Per tank:</b> ' + e.rateTank + '</div>';
+    if (e.rateHa) rows += '<div class="rate-entry-row"><b>Per ha:</b> ' + e.rateHa + '</div>';
+    if (e.timing) rows += '<div class="rate-entry-row"><b>Timing:</b> ' + e.timing + '</div>';
+    div.innerHTML = '<div class="rate-entry-head"><div class="rate-entry-name">' + e.name + '</div><button class="maint-remove-btn" data-id="' + e.id + '">Remove</button></div>' + rows;
+    ratesCatList.appendChild(div);
+  });
+  ratesCatList.querySelectorAll('.maint-remove-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      rateLibrary[currentRateCat] = rateLibrary[currentRateCat].filter(function(x) { return x.id !== btn.dataset.id; });
+      saveRateLibrary();
+      renderRatesList();
+    });
+  });
+}
+
+document.querySelectorAll('.tab-btn').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
+    document.querySelectorAll('.panel').forEach(function(p) { p.classList.remove('active'); });
+    btn.classList.add('active');
+    document.getElementById('panel-' + btn.dataset.tab).classList.add('active');
+    if (btn.dataset.tab === 'overview') renderOverview();
+  });
+});
+
+const dTitle = document.getElementById('d-title');
 const dCrop = document.getElementById('d-crop');
 const dVariety = document.getElementById('d-variety');
+const dPlantingDistance = document.getElementById('d-planting-distance');
 const dSowing = document.getElementById('d-sowing');
 const dPlanting = document.getElementById('d-planting');
 const dTrial = document.getElementById('d-trial');
+const dRate = document.getElementById('d-rate');
+const dTotalArea = document.getElementById('d-total-area');
+const dPlotSize = document.getElementById('d-plot-size');
+const riceRateCard = document.getElementById('rice-rate-card');
 
 function renderDetails() {
-  dCrop.value = state.details.crop || '';
-  dVariety.value = state.details.variety || '';
-  dSowing.value = state.details.sowing || '';
-  dPlanting.value = state.details.planting || '';
-  dTrial.value = state.details.trialType || '';
-  updateHeaderSub();
+  const t = currentTrial(); if (!t) return;
+  dTitle.value = t.details.title || '';
+  dCrop.value = t.details.crop || '';
+  dVariety.value = t.details.variety || '';
+  dPlantingDistance.value = t.details.plantingDistance || '';
+  dSowing.value = t.details.sowing || '';
+  dPlanting.value = t.details.planting || '';
+  dTrial.value = t.details.trialType || '';
+  dRate.value = t.details.rateKey || 'wet';
+  dTotalArea.value = t.details.totalAreaSqm || '';
+  dPlotSize.value = t.details.plotSizeSqm || '';
+  riceRateCard.style.display = t.details.cropKey === 'rice' ? 'block' : 'none';
 }
-
 function updateHeaderSub() {
+  const t = currentTrial(); if (!t) return;
   const parts = [];
-  if (state.details.crop) parts.push(state.details.crop);
-  if (state.details.variety) parts.push(state.details.variety);
-  if (state.details.trialType) parts.push(state.details.trialType + ' Trial');
-  document.getElementById('header-sub').textContent = parts.length ? parts.join(' · ') : 'Set up your trial details to begin';
+  if (t.details.variety) parts.push(t.details.variety);
+  if (t.details.trialType) parts.push(t.details.trialType + ' Trial');
+  headerSub.textContent = parts.length ? parts.join(' · ') : 'Tap Details to fill in trial info';
 }
-
-[dCrop, dVariety, dSowing, dTrial].forEach((el, i) => {
-  const keys = ['crop','variety','sowing','trialType'];
-  el.addEventListener('change', () => {
-    state.details[keys[i]] = el.value;
+[dTitle, dCrop, dVariety, dPlantingDistance, dSowing, dTrial].forEach(function(el, i) {
+  const keys = ['title','crop','variety','plantingDistance','sowing','trialType'];
+  el.addEventListener('change', function() {
+    const t = currentTrial(); if (!t) return;
+    t.details[keys[i]] = el.value;
     saveState();
     updateHeaderSub();
+    if (keys[i] === 'crop' || keys[i] === 'title') appTitle.textContent = cropMeta(t.details.cropKey).emoji + ' ' + displayTitle(t);
   });
 });
-dPlanting.addEventListener('change', () => {
-  state.details.planting = dPlanting.value;
+dPlanting.addEventListener('change', function() {
+  const t = currentTrial(); if (!t) return;
+  t.details.planting = dPlanting.value;
   saveState();
   renderApplication();
   renderMaintenance();
+  renderOverview();
+});
+[dRate, dTotalArea, dPlotSize].forEach(function(el, i) {
+  const keys = ['rateKey','totalAreaSqm','plotSizeSqm'];
+  el.addEventListener('input', function() {
+    const t = currentTrial(); if (!t) return;
+    t.details[keys[i]] = el.value;
+    saveState();
+    renderMaintenance();
+    renderOverview();
+  });
+});
+document.getElementById('delete-trial-btn').addEventListener('click', function() {
+  const t = currentTrial(); if (!t) return;
+  if (!confirm('Delete "' + displayTitle(t) + '" trial? This cannot be undone.')) return;
+  state.trials = state.trials.filter(function(x) { return x.id !== t.id; });
+  saveState();
+  showHome();
 });
 
-// ---------- TAB 2: Application ----------
 const appBlocksEl = document.getElementById('app-blocks');
 const appBody = document.getElementById('app-body');
 const addAppBtn = document.getElementById('add-app-btn');
 
-function nextLabel() {
-  const used = state.applications.map(a => a.label);
+function nextLabel(trial) {
+  const used = trial.applications.map(function(a) { return a.label; });
   const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-  for (const l of letters) if (!used.includes(l)) return l;
-  return 'X' + (state.applications.length + 1);
+  for (const l of letters) if (used.indexOf(l) === -1) return l;
+  return 'X' + (trial.applications.length + 1);
 }
 
-addAppBtn.addEventListener('click', () => {
-  state.applications.push({
+addAppBtn.addEventListener('click', function() {
+  const t = currentTrial(); if (!t) return;
+  t.applications.push({
     id: 'a' + Date.now(),
-    label: nextLabel(),
-    date: state.details.planting || new Date().toISOString().slice(0,10),
+    label: nextLabel(t),
+    date: t.details.planting || todayStr(),
     doneApp: false,
     assess: {1:false, 3:false, 7:false}
   });
@@ -265,150 +892,327 @@ addAppBtn.addEventListener('click', () => {
 });
 
 function renderApplication() {
-  // form blocks
+  const t = currentTrial(); if (!t) return;
   appBlocksEl.innerHTML = '';
-  state.applications.forEach(app => {
+  t.applications.forEach(function(app) {
     const div = document.createElement('div');
     div.className = 'app-block';
-    div.innerHTML = `
-      <h3>Application ${app.label}</h3>
-      <div class="app-row">
-        <div class="field">
-          <label>Date of Application ${app.label}</label>
-          <input type="date" data-id="${app.id}" class="app-date" value="${app.date}">
-        </div>
-        ${state.applications.length > 1 ? `<button class="remove-btn" data-id="${app.id}">Remove</button>` : ''}
-      </div>
-      <div class="assess-note">Assessments auto-scheduled at 1, 3 & 7 DA${app.label} — tracked in the table below.</div>
-    `;
+    div.innerHTML = '<h3>Application ' + app.label + '</h3><div class="app-row"><div class="field"><label>Date of Application ' + app.label + '</label><input type="date" data-id="' + app.id + '" class="app-date" value="' + app.date + '"></div>' + (t.applications.length > 1 ? '<button class="remove-btn" data-id="' + app.id + '">Remove</button>' : '') + '</div><div class="assess-note">Assessments auto-scheduled at 1, 3 & 7 DA' + app.label + ' — tracked in the table below.</div>';
     appBlocksEl.appendChild(div);
   });
 
-  appBlocksEl.querySelectorAll('.app-date').forEach(inp => {
-    inp.addEventListener('change', e => {
-      const app = state.applications.find(a => a.id === e.target.dataset.id);
+  appBlocksEl.querySelectorAll('.app-date').forEach(function(inp) {
+    inp.addEventListener('change', function(e) {
+      const app = t.applications.find(function(a) { return a.id === e.target.dataset.id; });
       if (app) app.date = e.target.value;
       saveState();
       renderApplication();
     });
   });
-  appBlocksEl.querySelectorAll('.remove-btn').forEach(btn => {
-    btn.addEventListener('click', e => {
-      state.applications = state.applications.filter(a => a.id !== e.target.dataset.id);
+  appBlocksEl.querySelectorAll('.remove-btn').forEach(function(btn) {
+    btn.addEventListener('click', function(e) {
+      t.applications = t.applications.filter(function(a) { return a.id !== e.target.dataset.id; });
       saveState();
       renderApplication();
     });
   });
 
-  // table
   const rows = [];
-  state.applications.forEach(app => {
+  t.applications.forEach(function(app) {
     if (!app.date) return;
     rows.push({
       dateObj: new Date(app.date + 'T00:00:00'),
-      dayLabel: `App ${app.label}`,
-      title: `Application ${app.label}`,
+      dayLabel: 'App ' + app.label,
+      title: 'Application ' + app.label,
       note: 'Date of application',
       type: 'pest',
       checked: app.doneApp,
-      onToggle: (val) => { app.doneApp = val; }
+      onToggle: function(val) { app.doneApp = val; }
     });
-    [1,3,7].forEach(n => {
+    [1,3,7].forEach(function(n) {
       const d = new Date(app.date + 'T00:00:00');
       d.setDate(d.getDate() + n);
       rows.push({
         dateObj: d,
-        dayLabel: `${n} DA${app.label}`,
-        title: `Assessment — ${n} DA${app.label}`,
-        note: `Rate/assess ${n} day(s) after Application ${app.label}`,
+        dayLabel: n + ' DA' + app.label,
+        title: 'Assessment — ' + n + ' DA' + app.label,
+        note: 'Rate/assess ' + n + ' day(s) after Application ' + app.label,
         type: 'assess',
         checked: !!app.assess[n],
-        onToggle: (val) => { app.assess[n] = val; }
+        onToggle: function(val) { app.assess[n] = val; }
       });
     });
   });
-  rows.sort((a,b) => a.dateObj - b.dateObj);
+  rows.sort(function(a,b) { return a.dateObj - b.dateObj; });
 
   appBody.innerHTML = '';
-  rows.forEach((r, idx) => {
+  rows.forEach(function(r, idx) {
     const tr = document.createElement('tr');
     const catClass = r.type === 'pest' ? 'cat-pest' : 'cat-assess';
     const tagClass = r.type === 'pest' ? 'tag-pest' : 'tag-assess';
     const tagLabel = r.type === 'pest' ? 'APPLICATION' : 'ASSESSMENT';
     tr.className = catClass + (isToday(r.dateObj) ? ' today-row' : '') + (r.checked ? ' done' : '');
-    tr.innerHTML = `
-      <td class="chk-cell"><input type="checkbox" data-idx="${idx}" ${r.checked ? 'checked' : ''}></td>
-      <td class="dat">${r.dayLabel}</td>
-      <td class="date">${fmt(r.dateObj)}</td>
-      <td>
-        <span class="title-text">${r.title}</span>
-        <span class="tag ${tagClass}">${tagLabel}</span>
-        <div class="note">${r.note}</div>
-      </td>`;
+    tr.innerHTML = '<td class="chk-cell"><input type="checkbox" data-idx="' + idx + '" ' + (r.checked ? 'checked' : '') + '></td><td class="dat">' + r.dayLabel + '</td><td class="date">' + fmt(r.dateObj) + '</td><td><span class="title-text">' + r.title + '</span><span class="tag ' + tagClass + '">' + tagLabel + '</span><div class="note">' + r.note + '</div></td>';
     appBody.appendChild(tr);
-    tr.querySelector('input').addEventListener('change', e => {
+    tr.querySelector('input').addEventListener('change', function(e) {
       r.onToggle(e.target.checked);
       saveState();
       renderApplication();
+      renderOverview();
     });
   });
 
   const total = rows.length;
-  const done = rows.filter(r => r.checked).length;
-  document.getElementById('app-progress').textContent = total ? `${done} / ${total} completed` : 'Add an application date to begin';
+  const done = rows.filter(function(r) { return r.checked; }).length;
+  document.getElementById('app-progress').textContent = total ? (done + ' / ' + total + ' completed') : 'Add an application date to begin';
 }
 
-// ---------- TAB 3: Maintenance ----------
-const maintBody = document.getElementById('maint-body');
+const maintList = document.getElementById('maint-list');
+const maintFooter = document.getElementById('maint-footer');
+const maintAddCard = document.getElementById('maint-add-card');
+const maintAddToggleBtn = document.getElementById('maint-add-toggle-btn');
+const maRepeat = document.getElementById('ma-repeat');
+const maRepeatCountField = document.getElementById('ma-repeat-count-field');
+
+maintAddToggleBtn.addEventListener('click', function() {
+  const showing = maintAddCard.style.display === 'block';
+  maintAddCard.style.display = showing ? 'none' : 'block';
+  maintAddToggleBtn.textContent = showing ? '+ Add Item' : 'Cancel';
+  if (!showing) {
+    document.getElementById('ma-name').value = '';
+    document.getElementById('ma-date').value = todayStr();
+    document.getElementById('ma-notes').value = '';
+    document.getElementById('ma-done').checked = false;
+    maRepeat.value = '0';
+    maRepeatCountField.style.display = 'none';
+  }
+});
+maRepeat.addEventListener('change', function() {
+  maRepeatCountField.style.display = maRepeat.value !== '0' ? 'block' : 'none';
+});
+
+document.getElementById('ma-save-btn').addEventListener('click', function() {
+  const t = currentTrial(); if (!t) return;
+  const name = document.getElementById('ma-name').value.trim();
+  const date = document.getElementById('ma-date').value;
+  if (!name || !date) { alert('Enter a name and date first.'); return; }
+  const type = document.getElementById('ma-type').value;
+  const notes = document.getElementById('ma-notes').value.trim();
+  const done = document.getElementById('ma-done').checked;
+  const repeatDays = parseInt(maRepeat.value, 10);
+  const repeatCount = repeatDays > 0 ? Math.max(1, parseInt(document.getElementById('ma-repeat-count').value, 10) || 1) : 1;
+
+  for (let i = 0; i < repeatCount; i++) {
+    const occDate = repeatDays > 0 ? addDaysToDateStr(date, repeatDays * i) : date;
+    t.customMaintenance.push({
+      id: 'c' + Date.now() + '_' + i,
+      type: type, title: name, date: occDate, notes: notes,
+      done: i === 0 ? done : false
+    });
+  }
+  saveState();
+  maintAddCard.style.display = 'none';
+  maintAddToggleBtn.textContent = '+ Add Item';
+  renderMaintenance();
+  renderOverview();
+});
 
 function renderMaintenance() {
-  const planting = state.details.planting;
-  maintBody.innerHTML = '';
-  if (!planting) {
-    maintBody.innerHTML = `<tr><td colspan="4" style="padding:16px; color:#889;">Set a Planting Date in the Details tab first.</td></tr>`;
+  const t = currentTrial(); if (!t) return;
+  const planting = t.details.planting;
+  maintList.innerHTML = '';
+
+  const planned = computePlannedItems(t);
+  const custom = t.customMaintenance || [];
+
+  if (!planned.length && !custom.length) {
+    maintList.innerHTML = '<div class="empty-state">No maintenance schedule yet for ' + t.details.crop + ' — still being optimized. Use "+ Add Item" below to log sprays/fertilizer as you go.</div>';
     document.getElementById('maint-progress').textContent = '';
-    return;
-  }
-  const sorted = [...state.maintenance].sort((a,b) => a.dat - b.dat);
-  sorted.forEach(ev => {
-    const d = addDays(planting, ev.dat);
-    const tr = document.createElement('tr');
-    tr.className = (ev.type === 'fert' ? 'cat-fert' : 'cat-pest') + (isToday(d) ? ' today-row' : '') + (ev.done ? ' done' : '');
-    tr.innerHTML = `
-      <td class="chk-cell"><input type="checkbox" data-id="${ev.id}" ${ev.done ? 'checked' : ''}></td>
-      <td class="dat">${ev.dat} DAT</td>
-      <td class="date">${fmt(d)}</td>
-      <td>
-        <span class="title-text">${ev.title}</span>
-        <span class="tag ${ev.type === 'fert' ? 'tag-fert' : 'tag-pest'}">${ev.type === 'fert' ? 'FERTILIZER' : 'PEST'}</span>
-        <div class="note">${ev.note}</div>
-      </td>`;
-    maintBody.appendChild(tr);
-  });
+    maintFooter.textContent = 'Maintenance program for ' + t.details.crop + ' coming soon.';
+  } else if (!planting) {
+    maintList.innerHTML = '<div class="empty-state">Set a Planting Date in the Details tab first.</div>';
+    document.getElementById('maint-progress').textContent = '';
+  } else {
+    maintFooter.textContent = 'Planned dates are based on Planting Date. Actual DAT recomputes from the date you log.';
 
-  maintBody.querySelectorAll('input[type=checkbox]').forEach(cb => {
-    cb.addEventListener('change', e => {
-      const ev = state.maintenance.find(x => x.id === e.target.dataset.id);
-      if (ev) ev.done = e.target.checked;
-      saveState();
-      renderMaintenance();
+    const entries = [];
+    planned.forEach(function(ev) {
+      const ms = maintState(t, ev.id);
+      const resolvedDate = ms.actualDate ? new Date(ms.actualDate + 'T00:00:00') : addDays(planting, ev.dat);
+      entries.push({ kind: 'planned', ev: ev, ms: ms, sortDate: resolvedDate });
     });
-  });
+    custom.forEach(function(c) {
+      entries.push({ kind: 'added', c: c, sortDate: new Date(c.date + 'T00:00:00') });
+    });
+    entries.sort(function(a,b) { return a.sortDate - b.sortDate; });
 
-  const doneCount = state.maintenance.filter(e => e.done).length;
-  document.getElementById('maint-progress').textContent = `${doneCount} / ${state.maintenance.length} completed`;
+    entries.forEach(function(entry) {
+      const group = document.createElement('div');
+
+      if (entry.kind === 'planned') {
+        const ev = entry.ev, ms = entry.ms;
+        group.className = 'maint-group' + (ms.done ? ' done' : '');
+        const plannedDate = addDays(planting, ev.dat);
+        const actualDat = ms.actualDate ? daysBetween(planting, ms.actualDate) : null;
+        const catClass = ev.type === 'fert' ? 'cat-fert' : 'cat-pest';
+        const tagClass = ev.type === 'fert' ? 'tag-fert' : 'tag-pest';
+        const tagLabel = ev.type === 'fert' ? 'FERTILIZER' : 'PEST';
+
+        group.innerHTML = '<div class="maint-planned-row ' + catClass + '"><div class="maint-title-block"><span class="title-text" style="' + (ms.done ? 'text-decoration:line-through;opacity:0.6;' : '') + '">' + ev.title + '</span><span class="tag ' + tagClass + '">' + tagLabel + '</span><span class="tag tag-planned">PLANNED · ' + ev.dat + ' DAT</span><div class="note">' + fmt(plannedDate) + '</div><div class="note">' + ev.note + '</div></div></div><div class="maint-actual-row"><div class="chk-cell"><input type="checkbox" class="maint-done" ' + (ms.done ? 'checked' : '') + '></div><input type="date" class="maint-actual-date" value="' + (ms.actualDate || '') + '"><div class="maint-actual-dat">' + (actualDat !== null ? actualDat + ' DAT' : '—') + '</div></div>';
+        group.querySelector('.maint-done').addEventListener('change', function(e) {
+          ms.done = e.target.checked;
+          if (ms.done && !ms.actualDate) ms.actualDate = todayStr();
+          saveState(); renderMaintenance(); renderOverview();
+        });
+        group.querySelector('.maint-actual-date').addEventListener('change', function(e) {
+          ms.actualDate = e.target.value || null;
+          saveState(); renderMaintenance(); renderOverview();
+        });
+      } else {
+        const c = entry.c;
+        group.className = 'maint-group' + (c.done ? ' done' : '');
+        const catClass = c.type === 'fert' ? 'cat-fert' : 'cat-pest';
+        const tagClass = c.type === 'fert' ? 'tag-fert' : 'tag-pest';
+        const tagLabel = c.type === 'fert' ? 'FERTILIZER' : 'PEST';
+        const dat = planting ? daysBetween(planting, c.date) : null;
+
+        group.innerHTML = '<div class="maint-planned-row ' + catClass + '"><div class="maint-title-block"><span class="title-text" style="' + (c.done ? 'text-decoration:line-through;opacity:0.6;' : '') + '">' + c.title + '</span><span class="tag ' + tagClass + '">' + tagLabel + '</span><span class="tag tag-added">ADDED' + (dat !== null ? ' · ' + dat + ' DAT' : '') + '</span><div class="note">' + fmt(new Date(c.date + 'T00:00:00')) + '</div>' + (c.notes ? '<div class="note">' + c.notes + '</div>' : '') + '</div><button class="maint-remove-btn" data-id="' + c.id + '">Remove</button></div><div class="maint-actual-row"><div class="chk-cell"><input type="checkbox" class="maint-custom-done" ' + (c.done ? 'checked' : '') + '></div><input type="date" class="maint-custom-date" value="' + c.date + '"><div class="maint-actual-dat"></div></div>';
+        group.querySelector('.maint-custom-done').addEventListener('change', function(e) {
+          c.done = e.target.checked; saveState(); renderMaintenance(); renderOverview();
+        });
+        group.querySelector('.maint-custom-date').addEventListener('change', function(e) {
+          c.date = e.target.value; saveState(); renderMaintenance(); renderOverview();
+        });
+        group.querySelector('.maint-remove-btn').addEventListener('click', function() {
+          t.customMaintenance = t.customMaintenance.filter(function(x) { return x.id !== c.id; });
+          saveState(); renderMaintenance(); renderOverview();
+        });
+      }
+
+      maintList.appendChild(group);
+    });
+
+    const totalCount = planned.length + custom.length;
+    const doneCount = planned.filter(function(ev) { return maintState(t, ev.id).done; }).length + custom.filter(function(c) { return c.done; }).length;
+    document.getElementById('maint-progress').textContent = doneCount + ' / ' + totalCount + ' completed';
+  }
 }
 
-// ---------- Init ----------
-loadState();
-renderDetails();
-renderApplication();
-renderMaintenance();
+let calMonthOffset = 0;
+const calGrid = document.getElementById('cal-grid');
+const calTitle = document.getElementById('cal-title');
+const dayEventsEl = document.getElementById('day-events');
 
-// ---------- PWA: register service worker for offline support ----------
+document.getElementById('cal-prev').addEventListener('click', function() { calMonthOffset--; renderOverview(); });
+document.getElementById('cal-next').addEventListener('click', function() { calMonthOffset++; renderOverview(); });
+
+function collectTrialEvents(t) {
+  const events = [];
+  if (t.details.planting) {
+    const items = computePlannedItems(t);
+    items.forEach(function(ev) {
+      const ms = maintState(t, ev.id);
+      const dateObj = ms.actualDate ? new Date(ms.actualDate + 'T00:00:00') : addDays(t.details.planting, ev.dat);
+      events.push({
+        dateObj: dateObj,
+        title: ev.title + (ms.actualDate ? ' (actual)' : ' (planned)'),
+        note: ev.dat + ' DAT planned — ' + ev.note,
+        type: ev.type,
+        checked: ms.done
+      });
+    });
+  }
+  (t.customMaintenance || []).forEach(function(c) {
+    events.push({
+      dateObj: new Date(c.date + 'T00:00:00'),
+      title: c.title + ' (added)',
+      note: c.notes || 'Manually added item',
+      type: c.type,
+      checked: c.done
+    });
+  });
+  t.applications.forEach(function(app) {
+    if (!app.date) return;
+    const base = new Date(app.date + 'T00:00:00');
+    events.push({ dateObj: base, title: 'Application ' + app.label, note: 'Date of application', type: 'pest', checked: app.doneApp });
+    [1,3,7].forEach(function(n) {
+      const d = new Date(app.date + 'T00:00:00'); d.setDate(d.getDate() + n);
+      events.push({ dateObj: d, title: 'Assessment — ' + n + ' DA' + app.label, note: n + ' day(s) after Application ' + app.label, type: 'assess', checked: !!app.assess[n] });
+    });
+  });
+  return events;
+}
+
+function renderOverview() {
+  const t = currentTrial(); if (!t) return;
+  const now = new Date();
+  const viewDate = new Date(now.getFullYear(), now.getMonth() + calMonthOffset, 1);
+  const year = viewDate.getFullYear();
+  const month = viewDate.getMonth();
+
+  calTitle.textContent = viewDate.toLocaleDateString('en-US', { month:'long', year:'numeric' });
+
+  const events = collectTrialEvents(t);
+
+  const firstDow = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  calGrid.innerHTML = '';
+  ['S','M','T','W','T','F','S'].forEach(function(d) {
+    const el = document.createElement('div');
+    el.className = 'cal-dow';
+    el.textContent = d;
+    calGrid.appendChild(el);
+  });
+  for (let i = 0; i < firstDow; i++) {
+    const el = document.createElement('div');
+    el.className = 'cal-day blank';
+    calGrid.appendChild(el);
+  }
+  for (let day = 1; day <= daysInMonth; day++) {
+    const dateObj = new Date(year, month, day);
+    const dayEvents = events.filter(function(e) { return sameDay(e.dateObj, dateObj); });
+    const el = document.createElement('div');
+    el.className = 'cal-day' + (dayEvents.length ? ' has-event' : '') + (isToday(dateObj) ? ' is-today' : '');
+    const types = Array.from(new Set(dayEvents.map(function(e) { return e.type; })));
+    el.innerHTML = '<span>' + day + '</span>' + (types.length ? '<div class="dot-row">' + types.map(function(ty) { return '<span class="cal-dot dot-' + ty + '"></span>'; }).join('') + '</div>' : '');
+    el.addEventListener('click', function() {
+      renderDayEvents(events, dateObj);
+    });
+    calGrid.appendChild(el);
+  }
+
+  let target = null;
+  if (year === now.getFullYear() && month === now.getMonth()) target = now;
+  else {
+    const firstWithEvents = events.find(function(e) { return e.dateObj.getFullYear() === year && e.dateObj.getMonth() === month; });
+    target = firstWithEvents ? firstWithEvents.dateObj : null;
+  }
+  if (target) renderDayEvents(events, target);
+  else dayEventsEl.innerHTML = '<div class="none">No events this month</div>';
+}
+
+function renderDayEvents(events, dateObj) {
+  const dayEvents = events.filter(function(e) { return sameDay(e.dateObj, dateObj); });
+  if (!dayEvents.length) {
+    dayEventsEl.innerHTML = '<div class="none">No events on ' + fmt(dateObj) + '</div>';
+    return;
+  }
+  const rows = dayEvents.map(function(e) {
+    const catClass = e.type === 'fert' ? 'cat-fert' : (e.type === 'assess' ? 'cat-assess' : 'cat-pest');
+    const tagClass = e.type === 'fert' ? 'tag-fert' : (e.type === 'assess' ? 'tag-assess' : 'tag-pest');
+    const tagLabel = e.type === 'fert' ? 'FERTILIZER' : (e.type === 'assess' ? 'ASSESSMENT' : 'APPLICATION/PEST');
+    return '<tr class="' + catClass + (e.checked ? ' done' : '') + '"><td class="chk-cell">' + (e.checked ? '✓' : '') + '</td><td><span class="title-text">' + e.title + '</span><span class="tag ' + tagClass + '">' + tagLabel + '</span><div class="note">' + e.note + '</div></td></tr>';
+  }).join('');
+  dayEventsEl.innerHTML = '<table><thead><tr><th colspan="2">' + fmt(dateObj) + '</th></tr></thead><tbody>' + rows + '</tbody></table>';
+}
+
+loadState();
+showHome();
+
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js').catch(err => console.log('SW registration failed', err));
+  window.addEventListener('load', function() {
+    navigator.serviceWorker.register('sw.js').catch(function(err) { console.log('SW registration failed', err); });
   });
 }
 </script>
