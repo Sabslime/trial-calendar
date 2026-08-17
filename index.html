@@ -425,7 +425,7 @@
 </div>
 
 <script>
-const APP_VERSION = '2.2';
+const APP_VERSION = '2.3';
 const STORAGE_KEY = 'trial-calendar-state-v3';
 
 // ---- Supabase cloud sync ----
@@ -637,13 +637,30 @@ function round(n, d) { return Math.round(n * Math.pow(10, d)) / Math.pow(10, d);
 
 function riceFixedItems() {
   return [
-    { id:'stemborer', dat: 38, type: 'pest', title: 'Stem borer spray (PI timing)', note: 'Targets whitehead-causing generation — confirm w/ egg mass scouting' },
+    { id:'stemborer', dat: 38, type: 'pest', title: 'Stemborer Control Spray', note: 'PI timing — targets whitehead-causing generation, confirm w/ egg mass scouting', targetKeyword: 'stemborer' },
     { id:'tillermaxx', dat: 25, type: 'fert', title: 'Tillermaxx', note: '5 ml per 16 L water (foliar)' },
-    { id:'incipio1', dat: 7, type: 'pest', title: 'Incipio', note: 'Deadhearts control' },
-    { id:'incipio2', dat: 14, type: 'pest', title: 'Incipio', note: 'Deadhearts control' },
-    { id:'prevathon', dat: 21, type: 'pest', title: 'Prevathon', note: 'Rotate MoA to break resistance' },
+    { id:'incipio1', dat: 7, type: 'pest', title: 'Stemborer Control Spray', note: 'Deadhearts control window', targetKeyword: 'stemborer' },
+    { id:'incipio2', dat: 14, type: 'pest', title: 'Stemborer Control Spray', note: 'Deadhearts control window', targetKeyword: 'stemborer' },
+    { id:'prevathon', dat: 21, type: 'pest', title: 'Stemborer Control Spray', note: 'Rotation slot — use a different MoA than your last spray to break resistance', targetKeyword: 'stemborer' },
   ];
 }
+
+// Find Rate Reference products (insecticide category) whose Target field mentions this keyword
+function getMatchingProducts(keyword) {
+  if (!keyword) return [];
+  const kw = keyword.toLowerCase();
+  return (rateLibrary.insecticide || []).filter(function(p) {
+    return (p.targetPest || '').toLowerCase().indexOf(kw) !== -1;
+  });
+}
+
+// Find a matching product's rate for the current trial's crop (case-insensitive match on crop name)
+function findCropRateForProduct(product, cropName) {
+  if (!product || !product.cropRates || !cropName) return null;
+  const cn = cropName.toLowerCase();
+  return product.cropRates.find(function(cr) { return (cr.crop || '').toLowerCase() === cn; }) || null;
+}
+
 
 function riceFertItems(rateKey, totalAreaSqm, plotSizeSqm) {
   const r = RICE_RATES[rateKey] || RICE_RATES.wet;
@@ -843,7 +860,8 @@ function currentTrial() {
 }
 function maintState(trial, itemId) {
   if (!trial.maintenanceState) trial.maintenanceState = {};
-  if (!trial.maintenanceState[itemId]) trial.maintenanceState[itemId] = { done: false, actualDate: null };
+  if (!trial.maintenanceState[itemId]) trial.maintenanceState[itemId] = { done: false, actualDate: null, productUsed: null };
+  if (trial.maintenanceState[itemId].productUsed === undefined) trial.maintenanceState[itemId].productUsed = null;
   return trial.maintenanceState[itemId];
 }
 
@@ -1660,7 +1678,36 @@ function renderMaintenance() {
         const tagClass = ev.type === 'fert' ? 'tag-fert' : 'tag-pest';
         const tagLabel = ev.type === 'fert' ? 'FERTILIZER' : 'PEST';
 
-        group.innerHTML = '<div class="maint-planned-row ' + catClass + '"><div class="maint-title-block"><span class="title-text" style="' + (ms.done ? 'text-decoration:line-through;opacity:0.6;' : '') + '">' + ev.title + '</span><span class="tag ' + tagClass + '">' + tagLabel + '</span><span class="tag tag-planned">PLANNED · ' + ev.dat + ' DAT</span><div class="note">' + fmt(plannedDate) + '</div><div class="note">' + ev.note + '</div>' + rainBadgeHtml((ms.actualDate || plannedDate.toISOString().slice(0,10))) + '</div></div><div class="maint-actual-row"><div class="chk-cell"><input type="checkbox" class="maint-done" ' + (ms.done ? 'checked' : '') + '></div><input type="date" class="maint-actual-date" value="' + (ms.actualDate || '') + '"><div class="maint-actual-dat">' + (actualDat !== null ? actualDat + ' DAT' : '—') + '</div></div>';
+        let productPickerHtml = '';
+        if (ev.targetKeyword) {
+          const matches = getMatchingProducts(ev.targetKeyword);
+          const selectedProduct = ms.productUsed ? (rateLibrary.insecticide || []).find(function(p) { return p.id === ms.productUsed.id; }) : null;
+          const cropRate = selectedProduct ? findCropRateForProduct(selectedProduct, t.details.crop) : null;
+
+          let optionsHtml = '<option value="">— Choose product used —</option>';
+          matches.forEach(function(p) {
+            optionsHtml += '<option value="' + p.id + '"' + (ms.productUsed && ms.productUsed.id === p.id ? ' selected' : '') + '>' + p.name + '</option>';
+          });
+          if (!matches.length) {
+            productPickerHtml = '<div class="note">No "' + ev.targetKeyword + '" products in your Rate Reference yet — add one under Insecticide.</div>';
+          } else {
+            productPickerHtml = '<div class="field" style="margin-top:6px;"><select class="maint-product-select">' + optionsHtml + '</select></div>';
+            if (selectedProduct) {
+              let rateNote = selectedProduct.name;
+              if (selectedProduct.activeIngredient) rateNote += ' (' + selectedProduct.activeIngredient + ')';
+              if (cropRate) {
+                rateNote += ' — ';
+                if (cropRate.tank) rateNote += cropRate.tank;
+                if (cropRate.ha) rateNote += (cropRate.tank ? ' · ' : '') + cropRate.ha;
+              } else {
+                rateNote += ' — no rate saved for ' + t.details.crop + ' yet';
+              }
+              productPickerHtml += '<div class="note">✅ ' + rateNote + '</div>';
+            }
+          }
+        }
+
+        group.innerHTML = '<div class="maint-planned-row ' + catClass + '"><div class="maint-title-block"><span class="title-text" style="' + (ms.done ? 'text-decoration:line-through;opacity:0.6;' : '') + '">' + ev.title + '</span><span class="tag ' + tagClass + '">' + tagLabel + '</span><span class="tag tag-planned">PLANNED · ' + ev.dat + ' DAT</span><div class="note">' + fmt(plannedDate) + '</div><div class="note">' + ev.note + '</div>' + productPickerHtml + rainBadgeHtml((ms.actualDate || plannedDate.toISOString().slice(0,10))) + '</div></div><div class="maint-actual-row"><div class="chk-cell"><input type="checkbox" class="maint-done" ' + (ms.done ? 'checked' : '') + '></div><input type="date" class="maint-actual-date" value="' + (ms.actualDate || '') + '"><div class="maint-actual-dat">' + (actualDat !== null ? actualDat + ' DAT' : '—') + '</div></div>';
         group.querySelector('.maint-done').addEventListener('change', function(e) {
           ms.done = e.target.checked;
           if (ms.done && !ms.actualDate) ms.actualDate = todayStr();
@@ -1670,6 +1717,18 @@ function renderMaintenance() {
           ms.actualDate = e.target.value || null;
           saveState(); renderMaintenance(); renderOverview();
         });
+        const productSelect = group.querySelector('.maint-product-select');
+        if (productSelect) {
+          productSelect.addEventListener('change', function(e) {
+            const pid = e.target.value;
+            if (!pid) { ms.productUsed = null; }
+            else {
+              const p = (rateLibrary.insecticide || []).find(function(x) { return x.id === pid; });
+              ms.productUsed = p ? { id: p.id, name: p.name } : null;
+            }
+            saveState(); renderMaintenance();
+          });
+        }
       } else {
         const c = entry.c;
         group.className = 'maint-group' + (c.done ? ' done' : '');
@@ -1717,7 +1776,7 @@ function collectTrialEvents(t) {
       const dateObj = ms.actualDate ? new Date(ms.actualDate + 'T00:00:00') : addDays(t.details.planting, ev.dat);
       events.push({
         dateObj: dateObj,
-        title: ev.title + (ms.actualDate ? ' (actual)' : ' (planned)'),
+        title: ev.title + (ms.productUsed ? ' — ' + ms.productUsed.name : '') + (ms.actualDate ? ' (actual)' : ' (planned)'),
         note: ev.dat + ' DAT planned — ' + ev.note,
         type: ev.type,
         checked: ms.done
