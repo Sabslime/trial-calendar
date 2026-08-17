@@ -412,7 +412,7 @@
 </div>
 
 <script>
-const APP_VERSION = '2.0.1';
+const APP_VERSION = '2.1';
 const STORAGE_KEY = 'trial-calendar-state-v3';
 
 // ---- Supabase cloud sync ----
@@ -425,12 +425,34 @@ try {
 
 let currentUser = null;
 let syncTimer = null;
+let retryInterval = null;
 let lastSyncStatus = '';
+const PENDING_SYNC_KEY = 'trial-calendar-pending-sync-v1';
+const LAST_SYNCED_KEY = 'trial-calendar-last-synced-v1';
+
+function isPendingSync() {
+  return localStorage.getItem(PENDING_SYNC_KEY) === '1';
+}
+function markPendingSync(val) {
+  try { localStorage.setItem(PENDING_SYNC_KEY, val ? '1' : '0'); } catch (e) {}
+}
+function getLastSyncedAt() {
+  try { return localStorage.getItem(LAST_SYNCED_KEY); } catch (e) { return null; }
+}
+function setLastSyncedAt(iso) {
+  try { localStorage.setItem(LAST_SYNCED_KEY, iso); } catch (e) {}
+}
+function formatLastSynced() {
+  const iso = getLastSyncedAt();
+  if (!iso) return 'Never synced yet.';
+  const d = new Date(iso);
+  return 'Last synced: ' + d.toLocaleDateString('en-US', { month:'short', day:'numeric' }) + ' ' + d.toLocaleTimeString('en-US', { hour:'numeric', minute:'2-digit' });
+}
 
 function setSyncStatus(msg) {
   lastSyncStatus = msg;
   const el = document.getElementById('settings-sync-status');
-  if (el) el.textContent = msg;
+  if (el) el.textContent = msg + (isPendingSync() ? ' (unsynced changes pending)' : '') + ' — ' + formatLastSynced();
 }
 
 // Gathers everything we persist locally into one object for cloud sync
@@ -458,27 +480,71 @@ function applyAllLocalData(data) {
   isApplyingRemote = false;
 }
 
+async function attemptCloudSync() {
+  if (!currentUser || !supabaseClient) return;
+  if (!navigator.onLine) {
+    markPendingSync(true);
+    setSyncStatus('Offline — will sync automatically once back online.');
+    return;
+  }
+  try {
+    const payload = collectAllLocalData();
+    const { error } = await supabaseClient
+      .from('app_state')
+      .upsert({ user_id: currentUser.id, data: payload, updated_at: new Date().toISOString() });
+    if (error) throw error;
+    markPendingSync(false);
+    setLastSyncedAt(new Date().toISOString());
+    setSyncStatus('Synced just now.');
+    stopRetryLoop();
+  } catch (e) {
+    console.error('Cloud sync failed', e);
+    markPendingSync(true);
+    setSyncStatus('Sync failed: ' + (e.message || e.error_description || JSON.stringify(e)) + ' — will keep retrying.');
+    startRetryLoop();
+  }
+}
+
 function queueCloudSync() {
   if (!currentUser || !supabaseClient) return;
+  markPendingSync(true);
   if (syncTimer) clearTimeout(syncTimer);
   setSyncStatus('Syncing…');
-  syncTimer = setTimeout(async function() {
-    try {
-      const payload = collectAllLocalData();
-      const { error } = await supabaseClient
-        .from('app_state')
-        .upsert({ user_id: currentUser.id, data: payload, updated_at: new Date().toISOString() });
-      if (error) throw error;
-      setSyncStatus('Synced just now.');
-    } catch (e) {
-      console.error('Cloud sync failed', e);
-      setSyncStatus('Sync failed: ' + (e.message || e.error_description || JSON.stringify(e)));
-    }
-  }, 1200);
+  syncTimer = setTimeout(attemptCloudSync, 1200);
 }
+
+// Retry loop: while there are unsynced changes, keep trying every 20s
+// (covers the case where you check something off, lose signal, and never touch the app again before you're back in range)
+function startRetryLoop() {
+  if (retryInterval) return;
+  retryInterval = setInterval(function() {
+    if (isPendingSync() && navigator.onLine) attemptCloudSync();
+  }, 20000);
+}
+function stopRetryLoop() {
+  if (retryInterval) { clearInterval(retryInterval); retryInterval = null; }
+}
+
+window.addEventListener('online', function() {
+  if (isPendingSync() && currentUser) {
+    setSyncStatus('Back online — syncing…');
+    attemptCloudSync();
+  }
+});
+window.addEventListener('offline', function() {
+  if (currentUser) setSyncStatus('Offline — changes will sync once back online.');
+});
+
 
 async function pullCloudData() {
   if (!currentUser || !supabaseClient) return;
+  if (isPendingSync()) {
+    // We have local changes that haven't made it to the cloud yet (likely made offline).
+    // Don't overwrite them — push them up instead of pulling down.
+    setSyncStatus('Unsynced local changes found — uploading those first.');
+    await attemptCloudSync();
+    return;
+  }
   setSyncStatus('Loading your synced data…');
   try {
     const { data, error } = await supabaseClient
@@ -489,6 +555,7 @@ async function pullCloudData() {
     if (error) throw error;
     if (data && data.data) {
       applyAllLocalData(data.data);
+      setLastSyncedAt(new Date().toISOString());
       setSyncStatus('Synced.');
     } else {
       // No cloud row yet — push current local data as the initial copy
@@ -497,7 +564,7 @@ async function pullCloudData() {
     }
   } catch (e) {
     console.error('Cloud pull failed', e);
-    setSyncStatus('Could not load cloud data — using local copy.');
+    setSyncStatus('Could not load cloud data: ' + (e.message || e.error_description || JSON.stringify(e)));
   }
 }
 
@@ -507,6 +574,7 @@ async function initAuth() {
   if (data && data.session) {
     currentUser = data.session.user;
     await pullCloudData();
+    if (isPendingSync()) startRetryLoop();
     if (viewHome.style.display !== 'none') renderHome();
   }
   updateAccountUI();
@@ -521,6 +589,7 @@ function updateAccountUI() {
     statusEl.textContent = 'Signed in as ' + currentUser.email + '. Data syncs automatically.';
     signinBtn.style.display = 'none';
     signoutBtn.style.display = 'block';
+    setSyncStatus(isPendingSync() ? 'Unsynced changes pending.' : 'Up to date.');
   } else {
     statusEl.textContent = 'Not signed in — data stays on this device only.';
     signinBtn.style.display = 'block';
