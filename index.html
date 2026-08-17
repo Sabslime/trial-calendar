@@ -10,6 +10,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Trial Calendar">
 <link rel="apple-touch-icon" href="icon-192.png">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <style>
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   body { font-family: -apple-system, Segoe UI, Roboto, sans-serif; background:#f4f6f2; margin:0; padding:0; padding-top:env(safe-area-inset-top, 20px); color:#1f2a1f; padding-bottom:24px; }
@@ -145,6 +146,24 @@
 </div>
 <div class="ver" id="app-version">v1.2</div>
 
+<div id="view-auth" class="home-wrap" style="display:none;">
+  <div class="card">
+    <div class="section-label">Sign in to sync across devices</div>
+    <div class="field">
+      <label for="auth-email">Email</label>
+      <input type="text" id="auth-email" placeholder="you@example.com" autocapitalize="none" autocorrect="off">
+    </div>
+    <div class="field">
+      <label for="auth-password">Password</label>
+      <input type="password" id="auth-password" placeholder="At least 6 characters">
+    </div>
+    <button class="add-btn" id="auth-signin-btn">Log In</button>
+    <button class="add-btn secondary" id="auth-signup-btn" style="margin-top:8px;">Create Account</button>
+    <div class="field-hint" id="auth-status" style="margin-top:10px;"></div>
+    <div class="field-hint" style="margin-top:14px;">You can also <button id="auth-skip-btn" style="background:none;border:none;color:#2e5e2e;font-weight:600;text-decoration:underline;padding:0;cursor:pointer;">use this device only</button> without an account (no cross-device sync).</div>
+  </div>
+</div>
+
 <div id="view-home" class="home-wrap">
   <div class="home-nav-row">
     <div class="home-nav-btn" id="go-rates-btn">Rate Reference</div>
@@ -229,6 +248,14 @@
       <div class="field-hint">Free key from api.windy.com. Used to show rain forecast (next 10 days) on Application and Maintenance dates. Note: shows precipitation amount (mm), not an exact % probability — Windy's free tier doesn't provide that.</div>
     </div>
     <button class="add-btn" id="settings-save-btn">Save</button>
+  </div>
+
+  <div class="card" id="settings-account-card">
+    <div class="section-label">Account & Sync</div>
+    <div class="field-hint" id="settings-account-status">Not signed in — data stays on this device only.</div>
+    <button class="add-btn secondary" id="settings-signin-nav-btn" style="margin-top:10px;">Sign In / Create Account</button>
+    <button class="add-btn" id="settings-signout-btn" style="display:none; margin-top:10px; background:#a3441d;">Sign Out</button>
+    <div class="field-hint" id="settings-sync-status" style="margin-top:10px;"></div>
   </div>
 </div>
 
@@ -385,8 +412,122 @@
 </div>
 
 <script>
-const APP_VERSION = '1.6';
+const APP_VERSION = '2.0';
 const STORAGE_KEY = 'trial-calendar-state-v3';
+
+// ---- Supabase cloud sync ----
+const SUPABASE_URL = 'https://sxzmoahmdgvppctdzqzb.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_FbdUFcEgMTAbpBt_blrfgw_GNIXxoSU';
+let supabaseClient = null;
+try {
+  if (window.supabase) supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+} catch (e) { console.error('Supabase init failed', e); }
+
+let currentUser = null;
+let syncTimer = null;
+let lastSyncStatus = '';
+
+function setSyncStatus(msg) {
+  lastSyncStatus = msg;
+  const el = document.getElementById('settings-sync-status');
+  if (el) el.textContent = msg;
+}
+
+// Gathers everything we persist locally into one object for cloud sync
+function collectAllLocalData() {
+  return {
+    trialState: state,
+    rateLibrary: rateLibrary,
+    settings: appSettings
+  };
+}
+function applyAllLocalData(data) {
+  isApplyingRemote = true;
+  if (data.trialState && Array.isArray(data.trialState.trials)) {
+    state = data.trialState;
+    saveState();
+  }
+  if (data.rateLibrary) {
+    rateLibrary = data.rateLibrary;
+    saveRateLibrary();
+  }
+  if (data.settings) {
+    appSettings = data.settings;
+    saveSettings();
+  }
+  isApplyingRemote = false;
+}
+
+function queueCloudSync() {
+  if (!currentUser || !supabaseClient) return;
+  if (syncTimer) clearTimeout(syncTimer);
+  setSyncStatus('Syncing…');
+  syncTimer = setTimeout(async function() {
+    try {
+      const payload = collectAllLocalData();
+      const { error } = await supabaseClient
+        .from('app_state')
+        .upsert({ user_id: currentUser.id, data: payload, updated_at: new Date().toISOString() });
+      if (error) throw error;
+      setSyncStatus('Synced just now.');
+    } catch (e) {
+      console.error('Cloud sync failed', e);
+      setSyncStatus('Sync failed — will retry on next change.');
+    }
+  }, 1200);
+}
+
+async function pullCloudData() {
+  if (!currentUser || !supabaseClient) return;
+  setSyncStatus('Loading your synced data…');
+  try {
+    const { data, error } = await supabaseClient
+      .from('app_state')
+      .select('data')
+      .eq('user_id', currentUser.id)
+      .maybeSingle();
+    if (error) throw error;
+    if (data && data.data) {
+      applyAllLocalData(data.data);
+      setSyncStatus('Synced.');
+    } else {
+      // No cloud row yet — push current local data as the initial copy
+      queueCloudSync();
+      setSyncStatus('No cloud data yet — uploaded this device\'s data.');
+    }
+  } catch (e) {
+    console.error('Cloud pull failed', e);
+    setSyncStatus('Could not load cloud data — using local copy.');
+  }
+}
+
+async function initAuth() {
+  if (!supabaseClient) return;
+  const { data } = await supabaseClient.auth.getSession();
+  if (data && data.session) {
+    currentUser = data.session.user;
+    await pullCloudData();
+    if (viewHome.style.display !== 'none') renderHome();
+  }
+  updateAccountUI();
+}
+
+function updateAccountUI() {
+  const statusEl = document.getElementById('settings-account-status');
+  const signinBtn = document.getElementById('settings-signin-nav-btn');
+  const signoutBtn = document.getElementById('settings-signout-btn');
+  if (!statusEl) return;
+  if (currentUser) {
+    statusEl.textContent = 'Signed in as ' + currentUser.email + '. Data syncs automatically.';
+    signinBtn.style.display = 'none';
+    signoutBtn.style.display = 'block';
+  } else {
+    statusEl.textContent = 'Not signed in — data stays on this device only.';
+    signinBtn.style.display = 'block';
+    signoutBtn.style.display = 'none';
+  }
+}
+
 
 const CROPS = [
   { key: 'rice', label: 'Rice', emoji: '🌾' },
@@ -514,11 +655,13 @@ function loadRateLibrary() {
 function saveRateLibrary() {
   try { localStorage.setItem(RATES_STORAGE_KEY, JSON.stringify(rateLibrary)); }
   catch (e) { console.error('Rate library save failed', e); }
+  if (!isApplyingRemote) queueCloudSync();
 }
 
 // ---- Settings (isolated storage, survives trial-data structure changes) ----
 const SETTINGS_STORAGE_KEY = 'trial-calendar-settings-v1';
 let appSettings = { windyApiKey: '' };
+let isApplyingRemote = false; // true while pulling cloud data, to avoid immediately re-pushing it
 function loadSettings() {
   try {
     const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
@@ -528,6 +671,7 @@ function loadSettings() {
 function saveSettings() {
   try { localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(appSettings)); }
   catch (e) { console.error('Settings save failed', e); }
+  if (!isApplyingRemote) queueCloudSync();
 }
 
 // ---- Windy forecast (per-trial, in-memory only — refetched each time a trial is opened) ----
@@ -609,6 +753,7 @@ function loadState() {
 function saveState() {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
   catch (e) { console.error('Save failed', e); }
+  if (!isApplyingRemote) queueCloudSync();
 }
 
 function currentTrial() {
@@ -652,6 +797,7 @@ const viewRates = document.getElementById('view-rates');
 const viewArchived = document.getElementById('view-archived');
 const viewTrial = document.getElementById('view-trial');
 const viewSettings = document.getElementById('view-settings');
+const viewAuth = document.getElementById('view-auth');
 const backBtn = document.getElementById('back-btn');
 const appTitle = document.getElementById('app-title');
 const headerSub = document.getElementById('header-sub');
@@ -664,7 +810,17 @@ function hideAllViews() {
   viewRates.style.display = 'none';
   viewArchived.style.display = 'none';
   viewSettings.style.display = 'none';
+  viewAuth.style.display = 'none';
   viewTrial.style.display = 'none';
+}
+
+function showAuth() {
+  hideAllViews();
+  viewAuth.style.display = 'block';
+  backBtn.style.display = 'inline-block';
+  appTitle.textContent = 'Sign In';
+  headerSub.textContent = 'Sync your data across devices';
+  document.getElementById('auth-status').textContent = '';
 }
 
 function showHome() {
@@ -714,6 +870,7 @@ function showSettings() {
   appTitle.textContent = 'Settings';
   headerSub.textContent = 'Saved separately — not affected by app updates';
   document.getElementById('settings-windy-key').value = appSettings.windyApiKey || '';
+  updateAccountUI();
 }
 
 function showTrial(id) {
@@ -752,6 +909,60 @@ document.getElementById('settings-save-btn').addEventListener('click', function(
   appSettings.windyApiKey = document.getElementById('settings-windy-key').value.trim();
   saveSettings();
   alert('Saved.');
+});
+
+document.getElementById('settings-signin-nav-btn').addEventListener('click', showAuth);
+
+document.getElementById('settings-signout-btn').addEventListener('click', async function() {
+  if (!supabaseClient) return;
+  if (!confirm('Sign out? Your data will stay saved in the cloud, but this device will stop syncing until you sign in again.')) return;
+  await supabaseClient.auth.signOut();
+  currentUser = null;
+  updateAccountUI();
+  setSyncStatus('');
+  alert('Signed out.');
+});
+
+document.getElementById('auth-skip-btn').addEventListener('click', function() { showHome(); });
+
+document.getElementById('auth-signup-btn').addEventListener('click', async function() {
+  if (!supabaseClient) { document.getElementById('auth-status').textContent = 'Cloud sync not available.'; return; }
+  const email = document.getElementById('auth-email').value.trim();
+  const password = document.getElementById('auth-password').value;
+  if (!email || password.length < 6) { document.getElementById('auth-status').textContent = 'Enter a valid email and a password of at least 6 characters.'; return; }
+  document.getElementById('auth-status').textContent = 'Creating account…';
+  try {
+    const { data, error } = await supabaseClient.auth.signUp({ email: email, password: password });
+    if (error) throw error;
+    if (data.session) {
+      currentUser = data.session.user;
+      await pullCloudData();
+      updateAccountUI();
+      showHome();
+    } else {
+      document.getElementById('auth-status').textContent = 'Account created. Check your email to confirm, then log in.';
+    }
+  } catch (e) {
+    document.getElementById('auth-status').textContent = 'Error: ' + e.message;
+  }
+});
+
+document.getElementById('auth-signin-btn').addEventListener('click', async function() {
+  if (!supabaseClient) { document.getElementById('auth-status').textContent = 'Cloud sync not available.'; return; }
+  const email = document.getElementById('auth-email').value.trim();
+  const password = document.getElementById('auth-password').value;
+  if (!email || !password) { document.getElementById('auth-status').textContent = 'Enter your email and password.'; return; }
+  document.getElementById('auth-status').textContent = 'Signing in…';
+  try {
+    const { data, error } = await supabaseClient.auth.signInWithPassword({ email: email, password: password });
+    if (error) throw error;
+    currentUser = data.session.user;
+    await pullCloudData();
+    updateAccountUI();
+    showHome();
+  } catch (e) {
+    document.getElementById('auth-status').textContent = 'Error: ' + e.message;
+  }
 });
 
 const trialList = document.getElementById('trial-list');
@@ -1445,6 +1656,7 @@ loadState();
 loadSettings();
 loadRateLibrary();
 showHome();
+initAuth();
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', function() {
