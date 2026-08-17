@@ -412,7 +412,7 @@
 </div>
 
 <script>
-const APP_VERSION = '2.0';
+const APP_VERSION = '2.0.1';
 const STORAGE_KEY = 'trial-calendar-state-v3';
 
 // ---- Supabase cloud sync ----
@@ -472,7 +472,7 @@ function queueCloudSync() {
       setSyncStatus('Synced just now.');
     } catch (e) {
       console.error('Cloud sync failed', e);
-      setSyncStatus('Sync failed — will retry on next change.');
+      setSyncStatus('Sync failed: ' + (e.message || e.error_description || JSON.stringify(e)));
     }
   }, 1200);
 }
