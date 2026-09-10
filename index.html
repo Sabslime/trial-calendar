@@ -275,7 +275,46 @@
       <button class="tab-btn preset-cat-tab-btn" data-preset-cat="fungicide">Fungicide</button>
     </div>
     <div id="pf-product-checklist"></div>
-    <button class="add-btn" id="pf-save-btn" style="margin-top:14px;">Save Preset</button>
+
+    <div class="section-label" style="margin-top:22px;">Slots (choose product at spray time)</div>
+    <div class="field-hint" style="margin-bottom:10px;">Use this for spots like "Stemborer control at 7 DAT" where you'll pick the exact product later, at the field.</div>
+    <div id="pf-slots-list"></div>
+    <div class="card" id="pf-slot-form" style="display:none; margin-bottom:10px;">
+      <div class="field">
+        <label>Slot Title</label>
+        <input type="text" id="pfs-title" placeholder="e.g. Stemborer Control Spray">
+      </div>
+      <div class="field">
+        <label>Category</label>
+        <select id="pfs-category">
+          <option value="insecticide">Insecticide</option>
+          <option value="herbicide">Herbicide</option>
+          <option value="fungicide">Fungicide</option>
+          <option value="fertilizer">Fertilizer</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Target Keyword</label>
+        <input type="text" id="pfs-keyword" placeholder="e.g. stemborer">
+        <div class="field-hint">Matches products whose saved Target field (in Rate Reference) contains this word.</div>
+      </div>
+      <div class="field">
+        <label>Start at (DAT)</label>
+        <input type="number" id="pfs-start-dat" min="0" placeholder="e.g. 7">
+      </div>
+      <div class="field">
+        <label>Repeat every (days, optional)</label>
+        <input type="number" id="pfs-interval" min="1" placeholder="e.g. 7">
+      </div>
+      <div class="field">
+        <label>Number of applications</label>
+        <input type="number" id="pfs-count" value="1" min="1">
+      </div>
+      <button class="add-btn" id="pfs-save-btn" type="button">Save Slot</button>
+    </div>
+    <button class="add-btn secondary" id="pf-add-slot-btn" type="button">+ Add Slot</button>
+
+    <button class="add-btn" id="pf-save-btn" style="margin-top:22px;">Save Preset</button>
   </div>
 </div>
 
@@ -474,7 +513,7 @@
 </div>
 
 <script>
-const APP_VERSION = '2.9';
+const APP_VERSION = '3.3';
 const STORAGE_KEY = 'trial-calendar-state-v3';
 
 // ---- Supabase cloud sync ----
@@ -670,6 +709,7 @@ const CROPS = [
   { key: 'corn', label: 'Corn', emoji: '🌽' },
   { key: 'eggplant', label: 'Eggplant', emoji: '🍆' },
   { key: 'tomato', label: 'Tomato', emoji: '🍅' },
+  { key: 'chili', label: 'Chili', emoji: '🌶️' },
   { key: 'cucumber', label: 'Cucumber', emoji: '🥒' },
   { key: 'other', label: 'Other', emoji: '🌱' },
 ];
@@ -700,10 +740,11 @@ function riceFixedItems() {
 }
 
 // Find Rate Reference products (insecticide category) whose Target field mentions this keyword
-function getMatchingProducts(keyword) {
+function getMatchingProducts(keyword, category) {
   if (!keyword) return [];
   const kw = keyword.toLowerCase();
-  return (rateLibrary.insecticide || []).filter(function(p) {
+  const cat = category || 'insecticide';
+  return (rateLibrary[cat] || []).filter(function(p) {
     return (p.cropRates || []).some(function(cr) { return (cr.target || '').toLowerCase().indexOf(kw) !== -1; });
   });
 }
@@ -744,11 +785,53 @@ function riceFertItems(rateKey, totalAreaSqm, plotSizeSqm) {
   ];
 }
 
+function isSolanaceous(cropKey) {
+  return cropKey === 'eggplant' || cropKey === 'tomato' || cropKey === 'chili';
+}
+
+// Fixed nutrition program for Solanaceous crops (eggplant, tomato, chili) — per-hill/per-tank rates, no area math needed
+function solanaceousFertItems() {
+  const items = [];
+  function add(dat, title, note) {
+    items.push({ id: 'sol_' + title.replace(/[^a-z0-9]/gi, '').toLowerCase() + '_' + dat + '_' + items.length, dat: dat, type: 'fert', title: title, note: note });
+  }
+  add(0, 'Unik 16', '5 g/hill');
+  add(0, 'Crop Boost', '50–100 ml/16L (spray)');
+  // Vegetative stage 3–15 DAT, every 3 days
+  for (let d = 3; d <= 15; d += 3) {
+    add(d, 'Nitrabor (drench)', '150 g/16L (150 ml drenching) — vegetative stage');
+  }
+  // Late vegetative 16–45 DAT, weekly
+  for (let d = 16; d <= 45; d += 7) {
+    add(d, 'Unik 16', '5 g/hill — late vegetative stage');
+    add(d, 'Nitrabor', '5 g/hill — late vegetative stage');
+  }
+  // Flowering to fruiting 46–55 DAT, every 5 days
+  for (let d = 46; d <= 55; d += 5) {
+    add(d, 'Winner', '5 g/hill — flowering to fruiting');
+    add(d, 'Nitrabor', '5 g/hill — flowering to fruiting');
+    add(d, 'Bortrac', '30 ml/16L spray — flowering to fruiting');
+    add(d, 'Caltrac', '100 ml/16L spray — flowering to fruiting');
+  }
+  // Harvesting 56–120 DAT, weekly
+  for (let d = 56; d <= 120; d += 7) {
+    add(d, 'Winner', '10 g/hill — harvesting stage');
+    add(d, 'Nitrabor', '10 g/hill — harvesting stage');
+    add(d, 'Bortrac', '30 ml/16L spray — harvesting stage');
+    add(d, 'Caltrac', '100 ml/16L spray — harvesting stage');
+  }
+  return items;
+}
+
 function computePlannedItems(trial) {
-  if (trial.details.cropKey !== 'rice') return [];
-  const d = trial.details;
-  const fertItems = riceFertItems(d.rateKey || 'wet', parseFloat(d.totalAreaSqm) || 0, parseFloat(d.plotSizeSqm) || 0);
-  return fertItems.concat(riceFixedItems());
+  if (trial.details.cropKey === 'rice') {
+    const d = trial.details;
+    return riceFertItems(d.rateKey || 'wet', parseFloat(d.totalAreaSqm) || 0, parseFloat(d.plotSizeSqm) || 0);
+  }
+  if (isSolanaceous(trial.details.cropKey)) {
+    return solanaceousFertItems();
+  }
+  return [];
 }
 
 function todayStr() {
@@ -825,7 +908,13 @@ let presets = []; // [{ id, name, items: [{ category, productId, productName, st
 function loadPresets() {
   try {
     const raw = localStorage.getItem(PRESETS_STORAGE_KEY);
-    if (raw) { const saved = JSON.parse(raw); if (Array.isArray(saved)) presets = saved; }
+    if (raw) {
+      const saved = JSON.parse(raw);
+      if (Array.isArray(saved)) {
+        presets = saved;
+        presets.forEach(function(p) { if (!p.slots) p.slots = []; });
+      }
+    }
   } catch (e) { }
 }
 function savePresets() {
@@ -917,6 +1006,11 @@ function loadState() {
         state = { trials: saved.trials, currentTrialId: saved.currentTrialId || null };
         state.trials.forEach(function(t) {
           if (!t.customMaintenance) t.customMaintenance = [];
+          t.customMaintenance.forEach(function(c) {
+            if (c.targetKeyword === undefined) c.targetKeyword = null;
+            if (c.targetCategory === undefined) c.targetCategory = null;
+            if (c.productUsed === undefined) c.productUsed = null;
+          });
           if (!t.plan) t.plan = [];
           if (typeof t.details.title !== 'string') t.details.title = '';
           if (typeof t.details.plantingDistance !== 'string') t.details.plantingDistance = '';
@@ -1076,7 +1170,7 @@ function showTrial(id) {
   const meta = cropMeta(t.details.cropKey);
   appTitle.textContent = meta.emoji + ' ' + displayTitle(t);
   updateHeaderSub();
-  document.querySelectorAll('.tab-btn:not(.rate-tab-btn)').forEach(function(b) { b.classList.remove('active'); });
+  document.querySelectorAll('.tab-btn[data-tab]').forEach(function(b) { b.classList.remove('active'); });
   document.querySelector('.tab-btn[data-tab="overview"]').classList.add('active');
   document.querySelectorAll('.panel').forEach(function(p) { p.classList.remove('active'); });
   document.getElementById('panel-overview').classList.add('active');
@@ -1480,9 +1574,9 @@ function renderRatesList() {
   });
 }
 
-document.querySelectorAll('.tab-btn').forEach(function(btn) {
+document.querySelectorAll('.tab-btn[data-tab]').forEach(function(btn) {
   btn.addEventListener('click', function() {
-    document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
+    document.querySelectorAll('.tab-btn[data-tab]').forEach(function(b) { b.classList.remove('active'); });
     document.querySelectorAll('.panel').forEach(function(p) { p.classList.remove('active'); });
     btn.classList.add('active');
     document.getElementById('panel-' + btn.dataset.tab).classList.add('active');
@@ -1883,28 +1977,95 @@ function openPresetForm(existingPreset) {
   editingPresetId = existingPreset ? existingPreset.id : null;
   document.getElementById('pf-name').value = existingPreset ? existingPreset.name : '';
   presetDraftItems = existingPreset ? existingPreset.items.map(function(it) { return Object.assign({}, it); }) : [];
+  presetDraftSlots = existingPreset && existingPreset.slots ? existingPreset.slots.map(function(s) { return Object.assign({}, s); }) : [];
   currentPresetCat = 'fertilizer';
   document.querySelectorAll('.preset-cat-tab-btn').forEach(function(b) { b.classList.toggle('active', b.dataset.presetCat === 'fertilizer'); });
   renderPresetChecklist();
+  renderPresetSlotsList();
+  document.getElementById('pf-slot-form').style.display = 'none';
   presetFormCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 document.getElementById('add-preset-btn').addEventListener('click', function() { openPresetForm(null); });
 
+// ---- Preset Slots (choose product at spray time) ----
+let presetDraftSlots = [];
+let editingSlotIndex = null;
+const pfSlotsList = document.getElementById('pf-slots-list');
+const pfSlotForm = document.getElementById('pf-slot-form');
+
+function renderPresetSlotsList() {
+  pfSlotsList.innerHTML = '';
+  if (!presetDraftSlots.length) return;
+  presetDraftSlots.forEach(function(slot, idx) {
+    const div = document.createElement('div');
+    div.className = 'plan-entry';
+    let meta = slot.category + ' — start ' + slot.startDat + ' DAT';
+    if (slot.repeatCount > 1) meta += ' · every ' + slot.intervalDays + ' days × ' + slot.repeatCount;
+    if (slot.targetKeyword) meta += ' · matches "' + slot.targetKeyword + '"';
+    div.innerHTML = '<div><div class="plan-entry-name">' + slot.title + '</div><div class="plan-entry-meta">' + meta + '</div></div><div class="plan-entry-actions"><button class="rate-edit-btn" data-idx="' + idx + '">Edit</button><button class="maint-remove-btn" data-idx="' + idx + '">Remove</button></div>';
+    pfSlotsList.appendChild(div);
+  });
+  pfSlotsList.querySelectorAll('.rate-edit-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() { openSlotForm(parseInt(btn.dataset.idx, 10)); });
+  });
+  pfSlotsList.querySelectorAll('.maint-remove-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      presetDraftSlots.splice(parseInt(btn.dataset.idx, 10), 1);
+      renderPresetSlotsList();
+    });
+  });
+}
+
+function openSlotForm(idx) {
+  editingSlotIndex = (idx === undefined || idx === null) ? null : idx;
+  pfSlotForm.style.display = 'block';
+  const slot = editingSlotIndex !== null ? presetDraftSlots[editingSlotIndex] : null;
+  document.getElementById('pfs-title').value = slot ? slot.title : '';
+  document.getElementById('pfs-category').value = slot ? slot.category : 'insecticide';
+  document.getElementById('pfs-keyword').value = slot ? slot.targetKeyword : '';
+  document.getElementById('pfs-start-dat').value = slot ? slot.startDat : '';
+  document.getElementById('pfs-interval').value = slot && slot.intervalDays ? slot.intervalDays : '';
+  document.getElementById('pfs-count').value = slot ? slot.repeatCount : 1;
+  pfSlotForm.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+document.getElementById('pf-add-slot-btn').addEventListener('click', function() { openSlotForm(null); });
+
+document.getElementById('pfs-save-btn').addEventListener('click', function() {
+  const title = document.getElementById('pfs-title').value.trim();
+  if (!title) { alert('Enter a slot title first.'); return; }
+  const startDatRaw = document.getElementById('pfs-start-dat').value;
+  if (startDatRaw === '') { alert('Enter a starting DAT.'); return; }
+  const slot = {
+    title: title,
+    category: document.getElementById('pfs-category').value,
+    targetKeyword: document.getElementById('pfs-keyword').value.trim(),
+    startDat: parseInt(startDatRaw, 10),
+    intervalDays: document.getElementById('pfs-interval').value ? parseInt(document.getElementById('pfs-interval').value, 10) : 0,
+    repeatCount: Math.max(1, parseInt(document.getElementById('pfs-count').value, 10) || 1)
+  };
+  if (editingSlotIndex !== null) presetDraftSlots[editingSlotIndex] = slot;
+  else presetDraftSlots.push(slot);
+  pfSlotForm.style.display = 'none';
+  editingSlotIndex = null;
+  renderPresetSlotsList();
+});
+
 document.getElementById('pf-save-btn').addEventListener('click', function() {
   const name = document.getElementById('pf-name').value.trim();
   if (!name) { alert('Enter a preset name first.'); return; }
-  if (!presetDraftItems.length) { alert('Check at least one product to include in this preset.'); return; }
+  if (!presetDraftItems.length && !presetDraftSlots.length) { alert('Add at least one product or slot to this preset.'); return; }
   if (editingPresetId) {
     const existing = presets.find(function(p) { return p.id === editingPresetId; });
-    if (existing) { existing.name = name; existing.items = presetDraftItems; }
+    if (existing) { existing.name = name; existing.items = presetDraftItems; existing.slots = presetDraftSlots; }
   } else {
-    presets.push({ id: 'preset_' + Date.now(), name: name, items: presetDraftItems });
+    presets.push({ id: 'preset_' + Date.now(), name: name, items: presetDraftItems, slots: presetDraftSlots });
   }
   savePresets();
   presetFormCard.style.display = 'none';
   editingPresetId = null;
   renderPresetsList();
 });
+
 
 function renderPresetsList() {
   presetsList.innerHTML = '';
@@ -1984,6 +2145,25 @@ document.getElementById('apply-preset-confirm-btn').addEventListener('click', fu
         title: title,
         date: dateStr,
         notes: notes + (count > 1 ? ' — application ' + (i + 1) + ' of ' + count : ''),
+        done: false
+      });
+    }
+  });
+
+  (preset.slots || []).forEach(function(slot) {
+    const count = Math.max(1, slot.repeatCount || 1);
+    const interval = slot.intervalDays || 0;
+    for (let i = 0; i < count; i++) {
+      const dateStr = addDaysToDateStr(t.details.planting, slot.startDat + (interval * i));
+      t.customMaintenance.push({
+        id: 'presetslot_' + preset.id + '_' + i + '_' + Date.now(),
+        type: categoryToType(slot.category),
+        title: slot.title,
+        date: dateStr,
+        notes: count > 1 ? 'Application ' + (i + 1) + ' of ' + count : '',
+        targetKeyword: slot.targetKeyword,
+        targetCategory: slot.category,
+        productUsed: null,
         done: false
       });
     }
@@ -2101,7 +2281,37 @@ function renderMaintenance() {
         const tagLabel = c.type === 'fert' ? 'FERTILIZER' : 'PEST';
         const dat = planting ? daysBetween(planting, c.date) : null;
 
-        group.innerHTML = '<div class="maint-planned-row ' + catClass + '"><div class="maint-title-block"><span class="title-text" style="' + (c.done ? 'text-decoration:line-through;opacity:0.6;' : '') + '">' + c.title + '</span><span class="tag ' + tagClass + '">' + tagLabel + '</span><span class="tag tag-added">ADDED' + (dat !== null ? ' · ' + dat + ' DAT' : '') + '</span><div class="note">' + fmt(new Date(c.date + 'T00:00:00')) + '</div>' + (c.notes ? '<div class="note">' + c.notes + '</div>' : '') + rainBadgeHtml(c.date) + '</div><button class="maint-remove-btn" data-id="' + c.id + '">Remove</button></div><div class="maint-actual-row"><div class="chk-cell"><input type="checkbox" class="maint-custom-done" ' + (c.done ? 'checked' : '') + '></div><input type="date" class="maint-custom-date" value="' + c.date + '"><div class="maint-actual-dat"></div></div>';
+        let slotPickerHtml = '';
+        if (c.targetKeyword) {
+          const matchCat = c.targetCategory || 'insecticide';
+          const matches = getMatchingProducts(c.targetKeyword, matchCat);
+          const selectedProduct = c.productUsed ? (rateLibrary[matchCat] || []).find(function(p) { return p.id === c.productUsed.id; }) : null;
+          const cropRate = selectedProduct ? findCropRateForProduct(selectedProduct, t.details.crop) : null;
+
+          let optionsHtml = '<option value="">— Choose product used —</option>';
+          matches.forEach(function(p) {
+            optionsHtml += '<option value="' + p.id + '"' + (c.productUsed && c.productUsed.id === p.id ? ' selected' : '') + '>' + p.name + '</option>';
+          });
+          if (!matches.length) {
+            slotPickerHtml = '<div class="note">No "' + c.targetKeyword + '" products in your ' + matchCat + ' Rate Reference yet.</div>';
+          } else {
+            slotPickerHtml = '<div class="field" style="margin-top:6px;"><select class="maint-slot-product-select">' + optionsHtml + '</select></div>';
+            if (selectedProduct) {
+              let rateNote = selectedProduct.name;
+              if (selectedProduct.activeIngredient) rateNote += ' (' + selectedProduct.activeIngredient + ')';
+              if (cropRate) {
+                rateNote += ' — ';
+                if (cropRate.tank) rateNote += cropRate.tank;
+                if (cropRate.ha) rateNote += (cropRate.tank ? ' · ' : '') + cropRate.ha;
+              } else {
+                rateNote += ' — no rate saved for ' + t.details.crop + ' yet';
+              }
+              slotPickerHtml += '<div class="note">✅ ' + rateNote + '</div>';
+            }
+          }
+        }
+
+        group.innerHTML = '<div class="maint-planned-row ' + catClass + '"><div class="maint-title-block"><span class="title-text" style="' + (c.done ? 'text-decoration:line-through;opacity:0.6;' : '') + '">' + c.title + '</span><span class="tag ' + tagClass + '">' + tagLabel + '</span><span class="tag tag-added">ADDED' + (dat !== null ? ' · ' + dat + ' DAT' : '') + '</span><div class="note">' + fmt(new Date(c.date + 'T00:00:00')) + '</div>' + (c.notes ? '<div class="note">' + c.notes + '</div>' : '') + slotPickerHtml + rainBadgeHtml(c.date) + '</div><button class="maint-remove-btn" data-id="' + c.id + '">Remove</button></div><div class="maint-actual-row"><div class="chk-cell"><input type="checkbox" class="maint-custom-done" ' + (c.done ? 'checked' : '') + '></div><input type="date" class="maint-custom-date" value="' + c.date + '"><div class="maint-actual-dat"></div></div>';
         group.querySelector('.maint-custom-done').addEventListener('change', function(e) {
           c.done = e.target.checked; saveState(); renderMaintenance(); renderOverview();
         });
@@ -2112,6 +2322,19 @@ function renderMaintenance() {
           t.customMaintenance = t.customMaintenance.filter(function(x) { return x.id !== c.id; });
           saveState(); renderMaintenance(); renderOverview();
         });
+        const slotSelect = group.querySelector('.maint-slot-product-select');
+        if (slotSelect) {
+          slotSelect.addEventListener('change', function(e) {
+            const pid = e.target.value;
+            const matchCat = c.targetCategory || 'insecticide';
+            if (!pid) { c.productUsed = null; }
+            else {
+              const p = (rateLibrary[matchCat] || []).find(function(x) { return x.id === pid; });
+              c.productUsed = p ? { id: p.id, name: p.name } : null;
+            }
+            saveState(); renderMaintenance();
+          });
+        }
       }
 
       maintList.appendChild(group);
