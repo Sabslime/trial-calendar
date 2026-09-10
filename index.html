@@ -74,6 +74,9 @@
   .maint-planned-row.cat-pest { border-left-color:#c0562e; }
   .maint-actual-row { display:flex; align-items:center; gap:8px; padding:8px 10px 10px 14px; background:#fafbf8; border-top:1px dashed #e3e8df; }
   .maint-actual-row input[type=date] { flex:1; font-size:0.85em; padding:7px; border-radius:6px; border:1px solid #ccc; }
+  .date-field-wrap { position:relative; flex:1; }
+  .date-field-display { pointer-events:none; padding:7px; border:1px solid #ccc; border-radius:6px; background:#fff; font-size:0.85em; font-variant-numeric:tabular-nums; color:#1f2a1f; }
+  .date-field-native { position:absolute; inset:0; opacity:0; width:100%; height:100%; margin:0; border:none; padding:0; }
   .maint-actual-dat { font-size:0.75em; color:#8a6410; font-weight:700; white-space:nowrap; min-width:52px; }
   .maint-title-block { flex:1; min-width:0; }
   .maint-remove-btn { background:none; border:none; color:#a3441d; font-size:0.75em; font-weight:600; cursor:pointer; padding:2px 4px; }
@@ -85,6 +88,28 @@
   .remove-btn { background:#fbe6dd; color:#a3441d; border:none; border-radius:6px; padding:8px 10px; font-size:0.8em; font-weight:600; cursor:pointer; }
   .add-btn { display:block; width:100%; background:#2e5e2e; color:#fff; border:none; border-radius:8px; padding:12px; font-size:0.9em; font-weight:600; cursor:pointer; margin-top:6px; }
   .add-btn.secondary { background:#fff; color:#2e5e2e; border:2px solid #2e5e2e; }
+  .fab-add-btn {
+    display: none;
+    position: fixed;
+    right: 20px;
+    bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: #2e5e2e;
+    color: #fff;
+    border: none;
+    font-size: 1.8em;
+    font-weight: 400;
+    line-height: 1;
+    box-shadow: 0 3px 10px rgba(0,0,0,0.25);
+    cursor: pointer;
+    z-index: 40;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .fab-add-btn.open { background: #a3441d; }
   .assess-note { font-size:0.78em; color:#667; margin-top:4px; }
 
   footer { font-size:0.72em; color:#889; margin-top:14px; text-align:center; padding: 0 16px 20px; }
@@ -506,14 +531,14 @@
       </div>
       <button class="add-btn" id="ma-save-btn">Add to Schedule</button>
     </div>
-    <button class="add-btn secondary" id="maint-add-toggle-btn" style="margin-top:10px;">+ Add Item</button>
+    <button class="fab-add-btn" id="maint-add-toggle-btn" title="Add Item">+</button>
 
     <footer id="maint-footer">Planned dates are based on Planting Date. Actual DAT recomputes from the date you log.</footer>
   </div>
 </div>
 
 <script>
-const APP_VERSION = '3.3';
+const APP_VERSION = '3.5';
 const STORAGE_KEY = 'trial-calendar-state-v3';
 
 // ---- Supabase cloud sync ----
@@ -1039,6 +1064,13 @@ function maintState(trial, itemId) {
 
 function fmt(d) {
   return d.toLocaleDateString('en-US', { weekday:'short', year:'numeric', month:'short', day:'numeric' });
+}
+function fmtMMDDYYYY(dateStr) {
+  if (!dateStr) return 'Set date';
+  const d = new Date(dateStr + 'T00:00:00');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return mm + '/' + dd + '/' + d.getFullYear();
 }
 function isToday(d) {
   const t = new Date(); t.setHours(0,0,0,0);
@@ -1574,6 +1606,11 @@ function renderRatesList() {
   });
 }
 
+function updateFabVisibility(tabName) {
+  const fab = document.getElementById('maint-add-toggle-btn');
+  if (fab) fab.style.display = (tabName === 'maintenance') ? 'flex' : 'none';
+}
+
 document.querySelectorAll('.tab-btn[data-tab]').forEach(function(btn) {
   btn.addEventListener('click', function() {
     document.querySelectorAll('.tab-btn[data-tab]').forEach(function(b) { b.classList.remove('active'); });
@@ -1581,6 +1618,7 @@ document.querySelectorAll('.tab-btn[data-tab]').forEach(function(btn) {
     btn.classList.add('active');
     document.getElementById('panel-' + btn.dataset.tab).classList.add('active');
     if (btn.dataset.tab === 'overview') renderOverview();
+    updateFabVisibility(btn.dataset.tab);
   });
 });
 
@@ -1867,7 +1905,9 @@ maProductSelect.addEventListener('change', function() {
 maintAddToggleBtn.addEventListener('click', function() {
   const showing = maintAddCard.style.display === 'block';
   maintAddCard.style.display = showing ? 'none' : 'block';
-  maintAddToggleBtn.textContent = showing ? '+ Add Item' : 'Cancel';
+  maintAddToggleBtn.textContent = showing ? '+' : '×';
+  maintAddToggleBtn.classList.toggle('open', !showing);
+  maintAddToggleBtn.title = showing ? 'Add Item' : 'Cancel';
   if (!showing) {
     document.getElementById('ma-name').value = '';
     document.getElementById('ma-date').value = todayStr();
@@ -1878,6 +1918,7 @@ maintAddToggleBtn.addEventListener('click', function() {
     maType.value = 'pest';
     populateMaProductSelect();
     maProductSelect.value = '';
+    maintAddCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
 });
 maRepeat.addEventListener('change', function() {
@@ -1905,7 +1946,9 @@ document.getElementById('ma-save-btn').addEventListener('click', function() {
   }
   saveState();
   maintAddCard.style.display = 'none';
-  maintAddToggleBtn.textContent = '+ Add Item';
+  maintAddToggleBtn.textContent = '+';
+  maintAddToggleBtn.classList.remove('open');
+  maintAddToggleBtn.title = 'Add Item';
   renderMaintenance();
   renderOverview();
 });
@@ -2251,7 +2294,8 @@ function renderMaintenance() {
           }
         }
 
-        group.innerHTML = '<div class="maint-planned-row ' + catClass + '"><div class="maint-title-block"><span class="title-text" style="' + (ms.done ? 'text-decoration:line-through;opacity:0.6;' : '') + '">' + ev.title + '</span><span class="tag ' + tagClass + '">' + tagLabel + '</span><span class="tag tag-planned">PLANNED · ' + ev.dat + ' DAT</span><div class="note">' + fmt(plannedDate) + '</div><div class="note">' + ev.note + '</div>' + productPickerHtml + rainBadgeHtml((ms.actualDate || plannedDate.toISOString().slice(0,10))) + '</div></div><div class="maint-actual-row"><div class="chk-cell"><input type="checkbox" class="maint-done" ' + (ms.done ? 'checked' : '') + '></div><input type="date" class="maint-actual-date" value="' + (ms.actualDate || '') + '"><div class="maint-actual-dat">' + (actualDat !== null ? actualDat + ' DAT' : '—') + '</div></div>';
+        const actualDateVal = ms.actualDate || plannedDate.toISOString().slice(0,10);
+        group.innerHTML = '<div class="maint-planned-row ' + catClass + '"><div class="maint-title-block"><span class="title-text" style="' + (ms.done ? 'text-decoration:line-through;opacity:0.6;' : '') + '">' + ev.title + '</span><span class="tag ' + tagClass + '">' + tagLabel + '</span><span class="tag tag-planned">PLANNED · ' + ev.dat + ' DAT</span><div class="note">' + fmt(plannedDate) + '</div><div class="note">' + ev.note + '</div>' + productPickerHtml + rainBadgeHtml((ms.actualDate || plannedDate.toISOString().slice(0,10))) + '</div></div><div class="maint-actual-row"><div class="chk-cell"><input type="checkbox" class="maint-done" ' + (ms.done ? 'checked' : '') + '></div><div class="date-field-wrap"><div class="date-field-display">' + fmtMMDDYYYY(actualDateVal) + '</div><input type="date" class="maint-actual-date date-field-native" value="' + actualDateVal + '"></div><div class="maint-actual-dat">' + (actualDat !== null ? actualDat + ' DAT' : '—') + '</div></div>';
         group.querySelector('.maint-done').addEventListener('change', function(e) {
           ms.done = e.target.checked;
           if (ms.done && !ms.actualDate) ms.actualDate = todayStr();
@@ -2311,7 +2355,7 @@ function renderMaintenance() {
           }
         }
 
-        group.innerHTML = '<div class="maint-planned-row ' + catClass + '"><div class="maint-title-block"><span class="title-text" style="' + (c.done ? 'text-decoration:line-through;opacity:0.6;' : '') + '">' + c.title + '</span><span class="tag ' + tagClass + '">' + tagLabel + '</span><span class="tag tag-added">ADDED' + (dat !== null ? ' · ' + dat + ' DAT' : '') + '</span><div class="note">' + fmt(new Date(c.date + 'T00:00:00')) + '</div>' + (c.notes ? '<div class="note">' + c.notes + '</div>' : '') + slotPickerHtml + rainBadgeHtml(c.date) + '</div><button class="maint-remove-btn" data-id="' + c.id + '">Remove</button></div><div class="maint-actual-row"><div class="chk-cell"><input type="checkbox" class="maint-custom-done" ' + (c.done ? 'checked' : '') + '></div><input type="date" class="maint-custom-date" value="' + c.date + '"><div class="maint-actual-dat"></div></div>';
+        group.innerHTML = '<div class="maint-planned-row ' + catClass + '"><div class="maint-title-block"><span class="title-text" style="' + (c.done ? 'text-decoration:line-through;opacity:0.6;' : '') + '">' + c.title + '</span><span class="tag ' + tagClass + '">' + tagLabel + '</span><span class="tag tag-added">ADDED' + (dat !== null ? ' · ' + dat + ' DAT' : '') + '</span><div class="note">' + fmt(new Date(c.date + 'T00:00:00')) + '</div>' + (c.notes ? '<div class="note">' + c.notes + '</div>' : '') + slotPickerHtml + rainBadgeHtml(c.date) + '</div><button class="maint-remove-btn" data-id="' + c.id + '">Remove</button></div><div class="maint-actual-row"><div class="chk-cell"><input type="checkbox" class="maint-custom-done" ' + (c.done ? 'checked' : '') + '></div><div class="date-field-wrap"><div class="date-field-display">' + fmtMMDDYYYY(c.date) + '</div><input type="date" class="maint-custom-date date-field-native" value="' + c.date + '"></div><div class="maint-actual-dat"></div></div>';
         group.querySelector('.maint-custom-done').addEventListener('change', function(e) {
           c.done = e.target.checked; saveState(); renderMaintenance(); renderOverview();
         });
