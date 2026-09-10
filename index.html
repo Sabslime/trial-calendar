@@ -64,6 +64,11 @@
   .progress { font-size:0.8em; color:#556; margin:8px 2px 4px; text-align:right; }
 
   .maint-group { background:#fff; border-radius:10px; box-shadow:0 1px 4px rgba(0,0,0,0.08); margin-bottom:10px; overflow:hidden; }
+  .plan-entry { background:#fff; border-radius:10px; padding:12px; box-shadow:0 1px 4px rgba(0,0,0,0.08); margin-bottom:10px; display:flex; justify-content:space-between; align-items:flex-start; gap:8px; }
+  .plan-entry-name { font-weight:700; font-size:0.9em; }
+  .plan-entry-meta { font-size:0.78em; color:#556; margin-top:3px; }
+  .plan-entry-actions { display:flex; gap:6px; flex-shrink:0; }
+  .plan-entry-actions button { background:none; border:none; font-size:0.75em; font-weight:600; cursor:pointer; padding:2px 6px; }
   .maint-planned-row { display:flex; align-items:flex-start; gap:8px; padding:10px 10px 6px; border-left:4px solid transparent; }
   .maint-planned-row.cat-fert { border-left-color:#4a8f4a; }
   .maint-planned-row.cat-pest { border-left-color:#c0562e; }
@@ -135,6 +140,7 @@
   .rate-entry-head { display:flex; justify-content:space-between; align-items:flex-start; gap:8px; }
   .rate-entry-name { font-weight:700; font-size:0.95em; }
   .rate-entry-ai { display:inline-block; font-family: -apple-system, Segoe UI, Roboto, monospace; font-size:0.68em; font-weight:600; color:#8a5a10; background:#fdf1de; border-radius:5px; padding:2px 7px; margin-left:6px; vertical-align:middle; letter-spacing:0.01em; }
+  .rate-entry-formulation { display:inline-block; font-size:0.68em; font-weight:700; color:#2a5580; background:#e2ecf7; border-radius:5px; padding:2px 7px; margin-left:6px; vertical-align:middle; }
   .rate-entry-actions { display:flex; gap:6px; flex-shrink:0; }
   .rate-entry-actions button { background:none; border:none; font-size:0.75em; font-weight:600; cursor:pointer; padding:2px 6px; }
   .rate-edit-btn { color:#2e5e2e; }
@@ -179,6 +185,7 @@
 <div id="view-home" class="home-wrap">
   <div class="home-nav-row">
     <div class="home-nav-btn" id="go-rates-btn">Rate Reference</div>
+    <div class="home-nav-btn" id="go-presets-btn">Presets</div>
     <div class="home-nav-btn" id="go-archived-btn">Archived</div>
     <div class="home-nav-btn" id="go-settings-btn">Settings</div>
   </div>
@@ -212,7 +219,8 @@
 
 <div id="view-rates" class="home-wrap" style="display:none;">
   <div class="tabs" style="position:static; margin:0 0 14px; border-radius:10px; background:#fff; box-shadow:0 1px 4px rgba(0,0,0,0.08); overflow:hidden;">
-    <button class="tab-btn rate-tab-btn active" data-rate-cat="insecticide">Insecticide</button>
+    <button class="tab-btn rate-tab-btn active" data-rate-cat="fertilizer">Fertilizer</button>
+    <button class="tab-btn rate-tab-btn" data-rate-cat="insecticide">Insecticide</button>
     <button class="tab-btn rate-tab-btn" data-rate-cat="herbicide">Herbicide</button>
     <button class="tab-btn rate-tab-btn" data-rate-cat="fungicide">Fungicide</button>
   </div>
@@ -224,6 +232,7 @@
     <div class="field">
       <label>Category</label>
       <select id="rf-category">
+        <option value="fertilizer">Fertilizer</option>
         <option value="insecticide">Insecticide</option>
         <option value="herbicide">Herbicide</option>
         <option value="fungicide">Fungicide</option>
@@ -236,15 +245,37 @@
     <div class="field">
       <label>Active Ingredient (AI)</label>
       <input type="text" id="rf-ai" placeholder="e.g. Chlorantraniliprole 5% + Thiamethoxam 20%">
+      <div class="field-hint">Separate multiple AIs with a "+" — each will show as its own tag.</div>
     </div>
-    <div class="field" id="rf-target-pest-field">
-      <label>Target Pest / Disease / Weed</label>
-      <input type="text" id="rf-target-pest" placeholder="e.g. Stemborer, other Lepidopterans">
+    <div class="field">
+      <label>Formulation</label>
+      <input type="text" id="rf-formulation" placeholder="e.g. 250 SC, OD, WP">
     </div>
     <div class="section-label">Rate per Crop</div>
     <div id="rf-crop-rows"></div>
     <button class="add-btn secondary" id="rf-add-crop-row-btn" type="button">+ Add Crop Rate</button>
     <button class="add-btn" id="rf-save-btn" style="margin-top:14px;">Save Product</button>
+  </div>
+</div>
+
+<div id="view-presets" class="home-wrap" style="display:none;">
+  <div id="presets-list"></div>
+  <button class="add-btn secondary" id="add-preset-btn">+ New Preset</button>
+
+  <div class="card" id="preset-form-card" style="display:none; margin-top:14px;">
+    <div class="field">
+      <label>Preset Name</label>
+      <input type="text" id="pf-name" placeholder="e.g. Rice Herbicide">
+    </div>
+    <div class="section-label">Products in this Preset</div>
+    <div class="tabs" style="position:static; margin:0 0 14px; border-radius:10px; background:#fff; box-shadow:0 1px 4px rgba(0,0,0,0.08); overflow:hidden;">
+      <button class="tab-btn preset-cat-tab-btn active" data-preset-cat="fertilizer">Fertilizer</button>
+      <button class="tab-btn preset-cat-tab-btn" data-preset-cat="insecticide">Insecticide</button>
+      <button class="tab-btn preset-cat-tab-btn" data-preset-cat="herbicide">Herbicide</button>
+      <button class="tab-btn preset-cat-tab-btn" data-preset-cat="fungicide">Fungicide</button>
+    </div>
+    <div id="pf-product-checklist"></div>
+    <button class="add-btn" id="pf-save-btn" style="margin-top:14px;">Save Preset</button>
   </div>
 </div>
 
@@ -376,6 +407,17 @@
   </div>
 
   <div class="panel" id="panel-maintenance">
+    <button class="add-btn secondary" id="apply-preset-btn" style="margin-bottom:10px;">📋 Apply a Preset</button>
+    <div class="card" id="apply-preset-card" style="display:none; margin-bottom:14px;">
+      <div class="field">
+        <label>Choose a Preset</label>
+        <select id="apply-preset-select">
+          <option value="">— No presets saved yet —</option>
+        </select>
+        <div class="field-hint">Dates are computed from this trial's Planting Date, then added to your schedule below as regular editable items.</div>
+      </div>
+      <button class="add-btn" id="apply-preset-confirm-btn">Apply to This Trial</button>
+    </div>
     <div id="maint-list"></div>
     <div class="progress" id="maint-progress"></div>
 
@@ -386,6 +428,13 @@
           <option value="pest">Pest</option>
           <option value="fert">Fertilizer</option>
         </select>
+      </div>
+      <div class="field">
+        <label>Choose from Rate Reference (optional)</label>
+        <select id="ma-product-select">
+          <option value="">— Type manually instead —</option>
+        </select>
+        <div class="field-hint">Picking a product fills in the name and rate/timing below automatically.</div>
       </div>
       <div class="field">
         <label>Product / Activity Name</label>
@@ -425,7 +474,7 @@
 </div>
 
 <script>
-const APP_VERSION = '2.3.1';
+const APP_VERSION = '2.9';
 const STORAGE_KEY = 'trial-calendar-state-v3';
 
 // ---- Supabase cloud sync ----
@@ -473,7 +522,8 @@ function collectAllLocalData() {
   return {
     trialState: state,
     rateLibrary: rateLibrary,
-    settings: appSettings
+    settings: appSettings,
+    presets: presets
   };
 }
 function applyAllLocalData(data) {
@@ -489,6 +539,10 @@ function applyAllLocalData(data) {
   if (data.settings) {
     appSettings = data.settings;
     saveSettings();
+  }
+  if (Array.isArray(data.presets)) {
+    presets = data.presets;
+    savePresets();
   }
   isApplyingRemote = false;
 }
@@ -650,7 +704,7 @@ function getMatchingProducts(keyword) {
   if (!keyword) return [];
   const kw = keyword.toLowerCase();
   return (rateLibrary.insecticide || []).filter(function(p) {
-    return (p.targetPest || '').toLowerCase().indexOf(kw) !== -1;
+    return (p.cropRates || []).some(function(cr) { return (cr.target || '').toLowerCase().indexOf(kw) !== -1; });
   });
 }
 
@@ -718,24 +772,31 @@ function makeTrial(cropKey, variety, trialType) {
     ],
     maintenanceState: {},
     customMaintenance: [],
+    plan: [], // planner entries: [{ id, category, productId, productName, type, startDat, intervalDays, repeatCount }]
     archived: false
   };
 }
 
 let state = { trials: [], currentTrialId: null };
 const RATES_STORAGE_KEY = 'trial-calendar-rate-library-v1'; // isolated key — untouched by trial-data structure changes
-let rateLibrary = { insecticide: [], herbicide: [], fungicide: [] };
+let rateLibrary = { fertilizer: [], insecticide: [], herbicide: [], fungicide: [] };
 
 function migrateRateEntry(e) {
   if (typeof e.activeIngredient !== 'string') e.activeIngredient = '';
+  if (typeof e.formulation !== 'string') e.formulation = '';
   // Old format had flat rateTank/rateHa/timing fields — migrate to cropRates array (unspecified crop)
   if (!e.cropRates) {
     e.cropRates = [];
     if (e.rateTank || e.rateHa || e.timing) {
-      e.cropRates.push({ crop: '', tank: e.rateTank || '', ha: e.rateHa || '', timing: e.timing || '' });
+      e.cropRates.push({ crop: '', tank: e.rateTank || '', ha: e.rateHa || '', timing: e.timing || '', intervalDays: null });
     }
     delete e.rateTank; delete e.rateHa; delete e.timing;
   }
+  e.cropRates.forEach(function(cr) {
+    if (cr.intervalDays === undefined) cr.intervalDays = null;
+    if (typeof cr.target !== 'string') cr.target = e.targetPest || '';
+  });
+  delete e.targetPest; // moved to per-crop
   return e;
 }
 function loadRateLibrary() {
@@ -744,6 +805,7 @@ function loadRateLibrary() {
     if (raw) {
       const saved = JSON.parse(raw);
       if (saved) {
+        rateLibrary.fertilizer = (saved.fertilizer || []).map(migrateRateEntry);
         rateLibrary.insecticide = (saved.insecticide || []).map(migrateRateEntry);
         rateLibrary.herbicide = (saved.herbicide || []).map(migrateRateEntry);
         rateLibrary.fungicide = (saved.fungicide || []).map(migrateRateEntry);
@@ -754,6 +816,21 @@ function loadRateLibrary() {
 function saveRateLibrary() {
   try { localStorage.setItem(RATES_STORAGE_KEY, JSON.stringify(rateLibrary)); }
   catch (e) { console.error('Rate library save failed', e); }
+  if (!isApplyingRemote) queueCloudSync();
+}
+
+// ---- Presets (isolated storage, reusable across trials) ----
+const PRESETS_STORAGE_KEY = 'trial-calendar-presets-v1';
+let presets = []; // [{ id, name, items: [{ category, productId, productName, startDat, intervalDays, repeatCount }] }]
+function loadPresets() {
+  try {
+    const raw = localStorage.getItem(PRESETS_STORAGE_KEY);
+    if (raw) { const saved = JSON.parse(raw); if (Array.isArray(saved)) presets = saved; }
+  } catch (e) { }
+}
+function savePresets() {
+  try { localStorage.setItem(PRESETS_STORAGE_KEY, JSON.stringify(presets)); }
+  catch (e) { console.error('Presets save failed', e); }
   if (!isApplyingRemote) queueCloudSync();
 }
 
@@ -840,6 +917,7 @@ function loadState() {
         state = { trials: saved.trials, currentTrialId: saved.currentTrialId || null };
         state.trials.forEach(function(t) {
           if (!t.customMaintenance) t.customMaintenance = [];
+          if (!t.plan) t.plan = [];
           if (typeof t.details.title !== 'string') t.details.title = '';
           if (typeof t.details.plantingDistance !== 'string') t.details.plantingDistance = '';
           if (t.details.location === undefined) t.details.location = null;
@@ -897,6 +975,7 @@ function sameDay(a, b) {
 const viewHome = document.getElementById('view-home');
 const viewNew = document.getElementById('view-new');
 const viewRates = document.getElementById('view-rates');
+const viewPresets = document.getElementById('view-presets');
 const viewArchived = document.getElementById('view-archived');
 const viewTrial = document.getElementById('view-trial');
 const viewSettings = document.getElementById('view-settings');
@@ -911,6 +990,7 @@ function hideAllViews() {
   viewHome.style.display = 'none';
   viewNew.style.display = 'none';
   viewRates.style.display = 'none';
+  viewPresets.style.display = 'none';
   viewArchived.style.display = 'none';
   viewSettings.style.display = 'none';
   viewAuth.style.display = 'none';
@@ -946,7 +1026,7 @@ function showNewTrial() {
   renderCropPicker();
 }
 
-let currentRateCat = 'insecticide';
+let currentRateCat = 'fertilizer';
 function showRates() {
   hideAllViews();
   viewRates.style.display = 'block';
@@ -955,6 +1035,16 @@ function showRates() {
   headerSub.textContent = 'Saved separately — not affected by app updates';
   document.getElementById('rate-form-card').style.display = 'none';
   renderRatesList();
+}
+
+function showPresets() {
+  hideAllViews();
+  viewPresets.style.display = 'block';
+  backBtn.style.display = 'inline-block';
+  appTitle.textContent = 'Presets';
+  headerSub.textContent = 'Reusable schedules — apply to any trial';
+  document.getElementById('preset-form-card').style.display = 'none';
+  renderPresetsList();
 }
 
 function showArchived() {
@@ -1006,6 +1096,7 @@ function showTrial(id) {
 backBtn.addEventListener('click', showHome);
 document.getElementById('new-trial-btn').addEventListener('click', showNewTrial);
 document.getElementById('go-rates-btn').addEventListener('click', showRates);
+document.getElementById('go-presets-btn').addEventListener('click', showPresets);
 document.getElementById('go-archived-btn').addEventListener('click', showArchived);
 document.getElementById('go-settings-btn').addEventListener('click', showSettings);
 document.getElementById('settings-save-btn').addEventListener('click', function() {
@@ -1245,7 +1336,6 @@ document.getElementById('create-trial-btn').addEventListener('click', function()
 const ratesCatList = document.getElementById('rates-cat-list');
 const rateFormCard = document.getElementById('rate-form-card');
 const rfCategory = document.getElementById('rf-category');
-const rfTargetPestField = document.getElementById('rf-target-pest-field');
 const rfCropRows = document.getElementById('rf-crop-rows');
 let editingRateId = null; // null = adding new, otherwise id of entry being edited
 
@@ -1259,14 +1349,19 @@ document.querySelectorAll('.rate-tab-btn').forEach(function(btn) {
   });
 });
 
-function addCropRow(cropVal, tankVal, haVal, timingVal) {
+function addCropRow(cropVal, tankVal, haVal, timingVal, intervalVal, targetVal) {
   const row = document.createElement('div');
   row.className = 'rf-crop-row';
+  const isFert = rfCategory.value === 'fertilizer';
+  const targetLabel = isFert ? 'Purpose / Nutrient (optional)' : 'Target Pest / Disease / Weed';
+  const targetPlaceholder = isFert ? 'e.g. N supplementation, Zinc correction' : 'e.g. Stemborer, other Lepidopterans';
   row.innerHTML = '<button type="button" class="remove-crop-row-btn">Remove</button>' +
     '<div class="field"><label>Crop</label><input type="text" class="rf-crop-name-input" placeholder="e.g. Rice" value="' + (cropVal || '') + '"></div>' +
+    '<div class="field"><label>' + targetLabel + '</label><input type="text" class="rf-crop-target-input" placeholder="' + targetPlaceholder + '" value="' + (targetVal || '') + '"></div>' +
     '<div class="field"><label>Rate per Tank (ml)</label><input type="text" class="rf-crop-tank-input" placeholder="e.g. 20 ml / 16L" value="' + (tankVal || '') + '"></div>' +
     '<div class="field"><label>Rate per ha (ml)</label><input type="text" class="rf-crop-ha-input" placeholder="e.g. 500 ml/ha" value="' + (haVal || '') + '"></div>' +
-    '<div class="field"><label>Application Timing</label><input type="text" class="rf-crop-timing-input" placeholder="e.g. 7 &amp; 14 DAT" value="' + (timingVal || '') + '"></div>';
+    '<div class="field"><label>Application Timing (notes)</label><input type="text" class="rf-crop-timing-input" placeholder="e.g. 7 &amp; 14 DAT" value="' + (timingVal || '') + '"></div>' +
+    '<div class="field"><label>Reapplication Interval (days, optional)</label><input type="number" class="rf-crop-interval-input" placeholder="e.g. 14" min="1" value="' + (intervalVal || '') + '"><div class="field-hint">If set, picking this product in "+ Add Item" auto-sets the repeat interval.</div></div>';
   row.querySelector('.remove-crop-row-btn').addEventListener('click', function() {
     row.remove();
   });
@@ -1276,23 +1371,22 @@ document.getElementById('rf-add-crop-row-btn').addEventListener('click', functio
 
 function openRateForm(existingEntry) {
   rateFormCard.style.display = 'block';
+  rfCategory.value = currentRateCat; // set category BEFORE building rows, so labels are correct
   rfCropRows.innerHTML = '';
   if (existingEntry) {
     editingRateId = existingEntry.id;
-    rfCategory.value = currentRateCat;
     document.getElementById('rf-name').value = existingEntry.name || '';
     document.getElementById('rf-ai').value = existingEntry.activeIngredient || '';
-    document.getElementById('rf-target-pest').value = existingEntry.targetPest || '';
+    document.getElementById('rf-formulation').value = existingEntry.formulation || '';
     (existingEntry.cropRates || []).forEach(function(cr) {
-      addCropRow(cr.crop, cr.tank, cr.ha, cr.timing);
+      addCropRow(cr.crop, cr.tank, cr.ha, cr.timing, cr.intervalDays, cr.target);
     });
     if (!existingEntry.cropRates || !existingEntry.cropRates.length) addCropRow();
   } else {
     editingRateId = null;
-    rfCategory.value = currentRateCat;
     document.getElementById('rf-name').value = '';
     document.getElementById('rf-ai').value = '';
-    document.getElementById('rf-target-pest').value = '';
+    document.getElementById('rf-formulation').value = '';
     addCropRow();
   }
   rateFormCard.scrollIntoView({ behavior:'smooth', block:'nearest' });
@@ -1304,26 +1398,30 @@ document.getElementById('rf-save-btn').addEventListener('click', function() {
   const name = document.getElementById('rf-name').value.trim();
   if (!name) { alert('Enter a product name first.'); return; }
   const activeIngredient = document.getElementById('rf-ai').value.trim();
+  const formulation = document.getElementById('rf-formulation').value.trim();
 
   const cropRates = [];
   rfCropRows.querySelectorAll('.rf-crop-row').forEach(function(row) {
     const crop = row.querySelector('.rf-crop-name-input').value.trim();
+    const target = row.querySelector('.rf-crop-target-input').value.trim();
     const tank = row.querySelector('.rf-crop-tank-input').value.trim();
     const ha = row.querySelector('.rf-crop-ha-input').value.trim();
     const timing = row.querySelector('.rf-crop-timing-input').value.trim();
-    if (crop || tank || ha || timing) cropRates.push({ crop: crop, tank: tank, ha: ha, timing: timing });
+    const intervalRaw = row.querySelector('.rf-crop-interval-input').value.trim();
+    const intervalDays = intervalRaw ? parseInt(intervalRaw, 10) : null;
+    if (crop || target || tank || ha || timing || intervalDays) cropRates.push({ crop: crop, target: target, tank: tank, ha: ha, timing: timing, intervalDays: intervalDays });
   });
 
   if (!rateLibrary[category]) rateLibrary[category] = [];
 
   if (editingRateId) {
     // Find and remove from whichever category it was in (in case category changed)
-    ['insecticide','herbicide','fungicide'].forEach(function(cat) {
+    ['fertilizer','insecticide','herbicide','fungicide'].forEach(function(cat) {
       rateLibrary[cat] = (rateLibrary[cat] || []).filter(function(x) { return x.id !== editingRateId; });
     });
-    rateLibrary[category].push({ id: editingRateId, name: name, activeIngredient: activeIngredient, targetPest: document.getElementById('rf-target-pest').value.trim(), cropRates: cropRates });
+    rateLibrary[category].push({ id: editingRateId, name: name, activeIngredient: activeIngredient, formulation: formulation, cropRates: cropRates });
   } else {
-    rateLibrary[category].push({ id: 'r' + Date.now(), name: name, activeIngredient: activeIngredient, targetPest: document.getElementById('rf-target-pest').value.trim(), cropRates: cropRates });
+    rateLibrary[category].push({ id: 'r' + Date.now(), name: name, activeIngredient: activeIngredient, formulation: formulation, cropRates: cropRates });
   }
 
   saveRateLibrary();
@@ -1333,6 +1431,14 @@ document.getElementById('rf-save-btn').addEventListener('click', function() {
   document.querySelectorAll('.rate-tab-btn').forEach(function(b) { b.classList.toggle('active', b.dataset.rateCat === category); });
   renderRatesList();
 });
+
+function renderAiBadges(aiString) {
+  if (!aiString) return '';
+  return aiString.split('+').map(function(part) {
+    part = part.trim();
+    return part ? '<span class="rate-entry-ai">' + part + '</span>' : '';
+  }).join('');
+}
 
 function renderRatesList() {
   ratesCatList.innerHTML = '';
@@ -1347,13 +1453,14 @@ function renderRatesList() {
     let cropBlocks = '';
     (e.cropRates || []).forEach(function(cr) {
       let cropRows = '';
+      if (cr.target) cropRows += '<div class="rate-crop-row"><b>Target:</b> ' + cr.target + '</div>';
       if (cr.tank) cropRows += '<div class="rate-crop-row"><b>Per tank:</b> ' + cr.tank + '</div>';
       if (cr.ha) cropRows += '<div class="rate-crop-row"><b>Per ha:</b> ' + cr.ha + '</div>';
       if (cr.timing) cropRows += '<div class="rate-crop-row"><b>Timing:</b> ' + cr.timing + '</div>';
+      if (cr.intervalDays) cropRows += '<div class="rate-crop-row"><b>Reapply every:</b> ' + cr.intervalDays + ' days</div>';
       cropBlocks += '<div class="rate-crop-block"><div class="rate-crop-name">' + (cr.crop || 'Unspecified crop') + '</div>' + cropRows + '</div>';
     });
-    div.innerHTML = '<div class="rate-entry-head"><div class="rate-entry-name">' + e.name + (e.activeIngredient ? '<span class="rate-entry-ai">' + e.activeIngredient + '</span>' : '') + '</div><div class="rate-entry-actions"><button class="rate-edit-btn" data-id="' + e.id + '">Edit</button><button class="maint-remove-btn" data-id="' + e.id + '">Remove</button></div></div>' +
-      (e.targetPest ? '<div class="rate-entry-target"><b>Target:</b> ' + e.targetPest + '</div>' : '') +
+    div.innerHTML = '<div class="rate-entry-head"><div class="rate-entry-name">' + e.name + (e.formulation ? '<span class="rate-entry-formulation">' + e.formulation + '</span>' : '') + renderAiBadges(e.activeIngredient) + '</div><div class="rate-entry-actions"><button class="rate-edit-btn" data-id="' + e.id + '">Edit</button><button class="maint-remove-btn" data-id="' + e.id + '">Remove</button></div></div>' +
       cropBlocks;
     ratesCatList.appendChild(div);
   });
@@ -1593,6 +1700,75 @@ const maintAddCard = document.getElementById('maint-add-card');
 const maintAddToggleBtn = document.getElementById('maint-add-toggle-btn');
 const maRepeat = document.getElementById('ma-repeat');
 const maRepeatCountField = document.getElementById('ma-repeat-count-field');
+const maType = document.getElementById('ma-type');
+const maProductSelect = document.getElementById('ma-product-select');
+
+function populateMaProductSelect() {
+  const t = currentTrial();
+  const isFert = maType.value === 'fert';
+  let items = [];
+  if (isFert) {
+    items = (rateLibrary.fertilizer || []).map(function(p) { return { id: p.id, label: p.name, product: p, cat: 'fertilizer' }; });
+  } else {
+    ['insecticide', 'herbicide', 'fungicide'].forEach(function(cat) {
+      (rateLibrary[cat] || []).forEach(function(p) {
+        items.push({ id: cat + ':' + p.id, label: '[' + cat.charAt(0).toUpperCase() + cat.slice(1) + '] ' + p.name, product: p, cat: cat });
+      });
+    });
+  }
+  maProductSelect.innerHTML = '<option value="">— Type manually instead —</option>';
+  items.forEach(function(it, idx) {
+    maProductSelect.innerHTML += '<option value="' + idx + '">' + it.label + '</option>';
+  });
+  maProductSelect._items = items; // stash for lookup on change
+}
+maType.addEventListener('change', populateMaProductSelect);
+
+function setRepeatToInterval(days) {
+  const select = maRepeat;
+  let opt = select.querySelector('option[value="' + days + '"]');
+  if (!opt) {
+    // Remove any previously auto-added custom option first
+    const existingCustom = select.querySelector('option[data-auto-interval="1"]');
+    if (existingCustom) existingCustom.remove();
+    opt = document.createElement('option');
+    opt.value = String(days);
+    opt.textContent = 'Every ' + days + ' days';
+    opt.setAttribute('data-auto-interval', '1');
+    select.appendChild(opt);
+  }
+  select.value = String(days);
+  maRepeatCountField.style.display = 'block';
+}
+
+maProductSelect.addEventListener('change', function() {
+  const items = maProductSelect._items || [];
+  const idx = maProductSelect.value;
+  if (idx === '') return;
+  const it = items[parseInt(idx, 10)];
+  if (!it) return;
+  const t = currentTrial();
+  document.getElementById('ma-name').value = it.product.name;
+  const cropRate = t ? findCropRateForProduct(it.product, t.details.crop) : null;
+  let notesParts = [];
+  if (it.product.formulation) notesParts.push(it.product.formulation);
+  if (it.product.activeIngredient) notesParts.push(it.product.activeIngredient);
+  if (cropRate && cropRate.target) notesParts.push(cropRate.target);
+  if (cropRate) {
+    if (cropRate.tank) notesParts.push(cropRate.tank);
+    if (cropRate.ha) notesParts.push(cropRate.ha);
+    if (cropRate.timing) notesParts.push(cropRate.timing);
+  } else if (t) {
+    notesParts.push('no rate saved for ' + t.details.crop + ' yet');
+  }
+  document.getElementById('ma-notes').value = notesParts.join(' — ');
+  if (cropRate && cropRate.intervalDays) {
+    setRepeatToInterval(cropRate.intervalDays);
+  } else {
+    maRepeat.value = '0';
+    maRepeatCountField.style.display = 'none';
+  }
+});
 
 maintAddToggleBtn.addEventListener('click', function() {
   const showing = maintAddCard.style.display === 'block';
@@ -1605,6 +1781,9 @@ maintAddToggleBtn.addEventListener('click', function() {
     document.getElementById('ma-done').checked = false;
     maRepeat.value = '0';
     maRepeatCountField.style.display = 'none';
+    maType.value = 'pest';
+    populateMaProductSelect();
+    maProductSelect.value = '';
   }
 });
 maRepeat.addEventListener('change', function() {
@@ -1637,6 +1816,188 @@ document.getElementById('ma-save-btn').addEventListener('click', function() {
   renderOverview();
 });
 
+// ================= PRESETS =================
+let presetDraftItems = [];
+let currentPresetCat = 'fertilizer';
+let editingPresetId = null;
+
+const presetsList = document.getElementById('presets-list');
+const presetFormCard = document.getElementById('preset-form-card');
+
+document.querySelectorAll('.preset-cat-tab-btn').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('.preset-cat-tab-btn').forEach(function(b) { b.classList.remove('active'); });
+    btn.classList.add('active');
+    currentPresetCat = btn.dataset.presetCat;
+    renderPresetChecklist();
+  });
+});
+
+function renderPresetChecklist() {
+  const container = document.getElementById('pf-product-checklist');
+  const products = rateLibrary[currentPresetCat] || [];
+  container.innerHTML = '';
+  if (!products.length) {
+    container.innerHTML = '<div class="empty-state" style="padding:12px;">No ' + currentPresetCat + ' products saved yet — add some in Rate Reference first.</div>';
+    return;
+  }
+  products.forEach(function(p) {
+    const existing = presetDraftItems.find(function(it) { return it.category === currentPresetCat && it.productId === p.id; });
+    const row = document.createElement('div');
+    row.className = 'rf-crop-row';
+    row.innerHTML = '<div class="checkbox-row"><input type="checkbox" class="pf-item-checkbox" ' + (existing ? 'checked' : '') + '><label style="margin:0; font-weight:700;">' + p.name + '</label></div>' +
+      '<div class="pf-item-fields" style="display:' + (existing ? 'block' : 'none') + '; margin-top:8px;">' +
+        '<div class="field"><label>Start at (DAT)</label><input type="number" class="pf-item-startdat" min="0" value="' + (existing ? existing.startDat : 0) + '"></div>' +
+        '<div class="field"><label>Repeat every (days, optional)</label><input type="number" class="pf-item-interval" min="1" value="' + (existing && existing.intervalDays ? existing.intervalDays : '') + '"></div>' +
+        '<div class="field"><label>Number of applications</label><input type="number" class="pf-item-count" min="1" value="' + (existing ? existing.repeatCount : 1) + '"></div>' +
+      '</div>';
+    const checkbox = row.querySelector('.pf-item-checkbox');
+    const fieldsDiv = row.querySelector('.pf-item-fields');
+    checkbox.addEventListener('change', function(e) {
+      if (e.target.checked) {
+        presetDraftItems.push({ category: currentPresetCat, productId: p.id, productName: p.name, startDat: 0, intervalDays: null, repeatCount: 1 });
+        fieldsDiv.style.display = 'block';
+      } else {
+        presetDraftItems = presetDraftItems.filter(function(it) { return !(it.category === currentPresetCat && it.productId === p.id); });
+        fieldsDiv.style.display = 'none';
+      }
+    });
+    row.querySelector('.pf-item-startdat').addEventListener('input', function(e) {
+      const it = presetDraftItems.find(function(x) { return x.category === currentPresetCat && x.productId === p.id; });
+      if (it) it.startDat = parseInt(e.target.value, 10) || 0;
+    });
+    row.querySelector('.pf-item-interval').addEventListener('input', function(e) {
+      const it = presetDraftItems.find(function(x) { return x.category === currentPresetCat && x.productId === p.id; });
+      if (it) it.intervalDays = e.target.value ? parseInt(e.target.value, 10) : null;
+    });
+    row.querySelector('.pf-item-count').addEventListener('input', function(e) {
+      const it = presetDraftItems.find(function(x) { return x.category === currentPresetCat && x.productId === p.id; });
+      if (it) it.repeatCount = Math.max(1, parseInt(e.target.value, 10) || 1);
+    });
+    container.appendChild(row);
+  });
+}
+
+function openPresetForm(existingPreset) {
+  presetFormCard.style.display = 'block';
+  editingPresetId = existingPreset ? existingPreset.id : null;
+  document.getElementById('pf-name').value = existingPreset ? existingPreset.name : '';
+  presetDraftItems = existingPreset ? existingPreset.items.map(function(it) { return Object.assign({}, it); }) : [];
+  currentPresetCat = 'fertilizer';
+  document.querySelectorAll('.preset-cat-tab-btn').forEach(function(b) { b.classList.toggle('active', b.dataset.presetCat === 'fertilizer'); });
+  renderPresetChecklist();
+  presetFormCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+document.getElementById('add-preset-btn').addEventListener('click', function() { openPresetForm(null); });
+
+document.getElementById('pf-save-btn').addEventListener('click', function() {
+  const name = document.getElementById('pf-name').value.trim();
+  if (!name) { alert('Enter a preset name first.'); return; }
+  if (!presetDraftItems.length) { alert('Check at least one product to include in this preset.'); return; }
+  if (editingPresetId) {
+    const existing = presets.find(function(p) { return p.id === editingPresetId; });
+    if (existing) { existing.name = name; existing.items = presetDraftItems; }
+  } else {
+    presets.push({ id: 'preset_' + Date.now(), name: name, items: presetDraftItems });
+  }
+  savePresets();
+  presetFormCard.style.display = 'none';
+  editingPresetId = null;
+  renderPresetsList();
+});
+
+function renderPresetsList() {
+  presetsList.innerHTML = '';
+  if (!presets.length) {
+    presetsList.innerHTML = '<div class="empty-state">No presets yet. Build one — e.g. "Rice Herbicide" — with products, timing, and frequency, then apply it to any trial.</div>';
+    return;
+  }
+  presets.forEach(function(preset) {
+    const div = document.createElement('div');
+    div.className = 'plan-entry';
+    div.innerHTML = '<div><div class="plan-entry-name">' + preset.name + '</div><div class="plan-entry-meta">' + preset.items.length + ' product' + (preset.items.length !== 1 ? 's' : '') + '</div></div><div class="plan-entry-actions"><button class="rate-edit-btn" data-id="' + preset.id + '">Edit</button><button class="maint-remove-btn" data-id="' + preset.id + '">Remove</button></div>';
+    presetsList.appendChild(div);
+  });
+  presetsList.querySelectorAll('.rate-edit-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      const preset = presets.find(function(p) { return p.id === btn.dataset.id; });
+      if (preset) openPresetForm(preset);
+    });
+  });
+  presetsList.querySelectorAll('.maint-remove-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      if (!confirm('Remove this preset? Trials that already applied it keep their schedule — this only removes the reusable preset itself.')) return;
+      presets = presets.filter(function(p) { return p.id !== btn.dataset.id; });
+      savePresets();
+      renderPresetsList();
+    });
+  });
+}
+
+// ---- Apply a preset to the current trial ----
+const applyPresetBtn = document.getElementById('apply-preset-btn');
+const applyPresetCard = document.getElementById('apply-preset-card');
+const applyPresetSelect = document.getElementById('apply-preset-select');
+
+applyPresetBtn.addEventListener('click', function() {
+  const showing = applyPresetCard.style.display === 'block';
+  applyPresetCard.style.display = showing ? 'none' : 'block';
+  if (!showing) {
+    if (!presets.length) {
+      applyPresetSelect.innerHTML = '<option value="">— No presets saved yet, build one under Presets —</option>';
+    } else {
+      applyPresetSelect.innerHTML = '<option value="">— Choose a preset —</option>' + presets.map(function(p) {
+        return '<option value="' + p.id + '">' + p.name + ' (' + p.items.length + ' products)</option>';
+      }).join('');
+    }
+  }
+});
+
+document.getElementById('apply-preset-confirm-btn').addEventListener('click', function() {
+  const t = currentTrial(); if (!t) return;
+  const preset = presets.find(function(p) { return p.id === applyPresetSelect.value; });
+  if (!preset) { alert('Choose a preset first.'); return; }
+  if (!t.details.planting) { alert('Set a Planting Date in Details first — dates are calculated from it.'); return; }
+
+  preset.items.forEach(function(item) {
+    const product = (rateLibrary[item.category] || []).find(function(p) { return p.id === item.productId; });
+    const cropRate = product ? findCropRateForProduct(product, t.details.crop) : null;
+    let noteParts = [];
+    if (product && product.formulation) noteParts.push(product.formulation);
+    if (product && product.activeIngredient) noteParts.push(product.activeIngredient);
+    if (cropRate) {
+      if (cropRate.target) noteParts.push(cropRate.target);
+      if (cropRate.tank) noteParts.push(cropRate.tank);
+      if (cropRate.ha) noteParts.push(cropRate.ha);
+    } else {
+      noteParts.push('no current rate found for ' + t.details.crop + ' — check Rate Reference');
+    }
+    const notes = noteParts.join(' — ');
+    const title = product ? product.name : (item.productName + ' (removed from Rate Reference)');
+    const count = Math.max(1, item.repeatCount || 1);
+    const interval = item.intervalDays || 0;
+    for (let i = 0; i < count; i++) {
+      const dateStr = addDaysToDateStr(t.details.planting, item.startDat + (interval * i));
+      t.customMaintenance.push({
+        id: 'preset_' + preset.id + '_' + item.productId + '_' + i + '_' + Date.now(),
+        type: categoryToType(item.category),
+        title: title,
+        date: dateStr,
+        notes: notes + (count > 1 ? ' — application ' + (i + 1) + ' of ' + count : ''),
+        done: false
+      });
+    }
+  });
+
+  saveState();
+  applyPresetCard.style.display = 'none';
+  renderMaintenance();
+  renderOverview();
+  alert('"' + preset.name + '" applied — ' + preset.items.length + ' product(s) added to your schedule below. Feel free to edit or remove any individual date.');
+});
+
+function categoryToType(category) { return category === 'fertilizer' ? 'fert' : 'pest'; }
+
 function renderMaintenance() {
   const t = currentTrial(); if (!t) return;
   const planting = t.details.planting;
@@ -1646,9 +2007,9 @@ function renderMaintenance() {
   const custom = t.customMaintenance || [];
 
   if (!planned.length && !custom.length) {
-    maintList.innerHTML = '<div class="empty-state">No maintenance schedule yet for ' + t.details.crop + ' — still being optimized. Use "+ Add Item" below to log sprays/fertilizer as you go.</div>';
+    maintList.innerHTML = '<div class="empty-state">No schedule yet. Use "📋 Apply a Preset" above, or "+ Add Item" below to build this trial\'s fertilizer/pesticide schedule.</div>';
     document.getElementById('maint-progress').textContent = '';
-    maintFooter.textContent = 'Maintenance program for ' + t.details.crop + ' coming soon.';
+    maintFooter.textContent = '';
   } else if (!planting) {
     maintList.innerHTML = '<div class="empty-state">Set a Planting Date in the Details tab first.</div>';
     document.getElementById('maint-progress').textContent = '';
@@ -1874,6 +2235,7 @@ function renderDayEvents(events, dateObj) {
 loadState();
 loadSettings();
 loadRateLibrary();
+loadPresets();
 showHome();
 initAuth();
 
