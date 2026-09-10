@@ -110,6 +110,25 @@
     justify-content: center;
   }
   .fab-add-btn.open { background: #a3441d; }
+  #maint-add-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.4);
+    z-index: 45;
+  }
+  #maint-add-card.sheet-open {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    max-height: 82vh;
+    overflow-y: auto;
+    margin: 0;
+    border-radius: 16px 16px 0 0;
+    box-shadow: 0 -4px 20px rgba(0,0,0,0.2);
+    z-index: 46;
+    padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+  }
   .assess-note { font-size:0.78em; color:#667; margin-top:4px; }
 
   footer { font-size:0.72em; color:#889; margin-top:14px; text-align:center; padding: 0 16px 20px; }
@@ -292,6 +311,12 @@
       <label>Preset Name</label>
       <input type="text" id="pf-name" placeholder="e.g. Rice Herbicide">
     </div>
+    <div class="field">
+      <label>Crop</label>
+      <select id="pf-crop">
+        <option value="">Any crop</option>
+      </select>
+    </div>
     <div class="section-label">Products in this Preset</div>
     <div class="tabs" style="position:static; margin:0 0 14px; border-radius:10px; background:#fff; box-shadow:0 1px 4px rgba(0,0,0,0.08); overflow:hidden;">
       <button class="tab-btn preset-cat-tab-btn active" data-preset-cat="fertilizer">Fertilizer</button>
@@ -402,9 +427,52 @@
         <input type="text" id="d-variety" placeholder="e.g. RC160, Co39">
       </div>
       <div class="field">
+        <label for="d-trial">Trial Type</label>
+        <select id="d-trial">
+          <option value="">— Select —</option>
+          <option value="Insecticide">Insecticide</option>
+          <option value="Herbicide">Herbicide</option>
+          <option value="Fungicide">Fungicide</option>
+        </select>
+      </div>
+
+      <!-- Generic planting distance (non-rice, non-Solanaceous crops) -->
+      <div class="field" id="generic-planting-distance-field">
         <label for="d-planting-distance">Planting Distance (cm)</label>
         <input type="text" id="d-planting-distance" placeholder="e.g. 20 x 20 cm">
       </div>
+
+      <!-- Rice planting distance: recommended dropdown by trial type -->
+      <div class="field" id="rice-planting-distance-field" style="display:none;">
+        <label for="d-planting-distance-rice">Planting Distance</label>
+        <select id="d-planting-distance-rice">
+          <option value="20 cm">20 cm — recommended for Insecticide/Fungicide</option>
+          <option value="25 cm">25 cm — recommended for Herbicide</option>
+          <option value="__other__">Other (specify)</option>
+        </select>
+        <input type="text" id="d-planting-distance-rice-other" placeholder="e.g. 30 cm" style="display:none; margin-top:8px;">
+      </div>
+
+      <!-- Solanaceous (eggplant/tomato/chili): separate plant & row spacing -->
+      <div id="solanaceous-planting-distance-field" style="display:none;">
+        <div class="field">
+          <label for="d-planting-distance-plant">Planting Distance (Plant)</label>
+          <select id="d-planting-distance-plant">
+            <option value="50 cm">50 cm — recommended</option>
+            <option value="__other__">Other (specify)</option>
+          </select>
+          <input type="text" id="d-planting-distance-plant-other" placeholder="e.g. 45 cm" style="display:none; margin-top:8px;">
+        </div>
+        <div class="field">
+          <label for="d-planting-distance-row">Planting Distance (Row)</label>
+          <select id="d-planting-distance-row">
+            <option value="100 cm">100 cm — recommended</option>
+            <option value="__other__">Other (specify)</option>
+          </select>
+          <input type="text" id="d-planting-distance-row-other" placeholder="e.g. 90 cm" style="display:none; margin-top:8px;">
+        </div>
+      </div>
+
       <div class="field">
         <label>Trial Location</label>
         <button class="add-btn secondary" id="set-location-btn" type="button" style="margin-top:0;">📍 Set Trial Location (GPS)</button>
@@ -415,20 +483,17 @@
       </div>
       <div class="field">
         <label for="d-sowing">Seedling Sowing Date</label>
-        <input type="date" id="d-sowing">
+        <div class="date-field-wrap">
+          <div class="date-field-display" id="d-sowing-display">Set date</div>
+          <input type="date" id="d-sowing" class="date-field-native">
+        </div>
       </div>
       <div class="field">
         <label for="d-planting">Planting / Transplanting Date (0 DAT)</label>
-        <input type="date" id="d-planting">
-      </div>
-      <div class="field">
-        <label for="d-trial">Trial Type</label>
-        <select id="d-trial">
-          <option value="">— Select —</option>
-          <option value="Insecticide">Insecticide</option>
-          <option value="Herbicide">Herbicide</option>
-          <option value="Fungicide">Fungicide</option>
-        </select>
+        <div class="date-field-wrap">
+          <div class="date-field-display" id="d-planting-display">Set date</div>
+          <input type="date" id="d-planting" class="date-field-native">
+        </div>
       </div>
     </div>
 
@@ -485,7 +550,8 @@
     <div id="maint-list"></div>
     <div class="progress" id="maint-progress"></div>
 
-    <div class="card" id="maint-add-card" style="display:none; margin-top:10px;">
+    <div id="maint-add-backdrop" style="display:none;"></div>
+    <div class="card" id="maint-add-card" style="display:none;">
       <div class="field">
         <label>Type</label>
         <select id="ma-type">
@@ -538,7 +604,7 @@
 </div>
 
 <script>
-const APP_VERSION = '3.5';
+const APP_VERSION = '3.9';
 const STORAGE_KEY = 'trial-calendar-state-v3';
 
 // ---- Supabase cloud sync ----
@@ -873,7 +939,7 @@ function makeTrial(cropKey, variety, trialType) {
     id: 't' + Date.now(),
     details: {
       title: '', crop: meta.label, cropKey: cropKey, variety: variety || '', sowing: '', planting: todayStr(), trialType: trialType || '',
-      plantingDistance: '', location: null, rateKey: 'wet', totalAreaSqm: '', plotSizeSqm: ''
+      plantingDistance: '', plantingDistancePlant: '', plantingDistanceRow: '', location: null, rateKey: 'wet', totalAreaSqm: '', plotSizeSqm: ''
     },
     applications: [
       { id:'a1', label:'A', date: todayStr(), doneApp:false, assess:{1:false,3:false,7:false} }
@@ -937,7 +1003,10 @@ function loadPresets() {
       const saved = JSON.parse(raw);
       if (Array.isArray(saved)) {
         presets = saved;
-        presets.forEach(function(p) { if (!p.slots) p.slots = []; });
+        presets.forEach(function(p) {
+          if (!p.slots) p.slots = [];
+          if (typeof p.cropKey !== 'string') p.cropKey = '';
+        });
       }
     }
   } catch (e) { }
@@ -1040,6 +1109,8 @@ function loadState() {
           if (typeof t.details.title !== 'string') t.details.title = '';
           if (typeof t.details.plantingDistance !== 'string') t.details.plantingDistance = '';
           if (t.details.location === undefined) t.details.location = null;
+          if (typeof t.details.plantingDistancePlant !== 'string') t.details.plantingDistancePlant = '';
+          if (typeof t.details.plantingDistanceRow !== 'string') t.details.plantingDistanceRow = '';
           if (typeof t.archived !== 'boolean') t.archived = false;
         });
       }
@@ -1422,6 +1493,12 @@ function renderArchivedList() {
     if (t.details.variety) metaParts.push(t.details.variety);
     metaParts.push('Planted ' + (t.details.planting || '—'));
     div.innerHTML = '<div class="trial-icon">' + meta.emoji + '</div><div class="trial-info"><div class="trial-name">' + displayTitle(t) + '</div><div class="trial-meta">' + metaParts.join(' · ') + '</div></div>';
+
+    const btnGroup = document.createElement('div');
+    btnGroup.style.display = 'flex';
+    btnGroup.style.gap = '6px';
+    btnGroup.style.flexShrink = '0';
+
     const unarchiveBtn = document.createElement('button');
     unarchiveBtn.className = 'remove-btn';
     unarchiveBtn.textContent = 'Unarchive';
@@ -1430,7 +1507,24 @@ function renderArchivedList() {
       saveState();
       renderArchivedList();
     });
-    div.appendChild(unarchiveBtn);
+
+    const deleteBtn = document.createElement('button');
+    deleteBtn.className = 'remove-btn';
+    deleteBtn.style.background = '#a3441d';
+    deleteBtn.style.color = '#fff';
+    deleteBtn.textContent = 'Delete';
+    deleteBtn.addEventListener('click', function() {
+      const name = displayTitle(t);
+      const typed = prompt('This permanently deletes "' + name + '" and all its schedule/history — this cannot be undone.\n\nType DELETE to confirm:');
+      if (typed !== 'DELETE') return;
+      state.trials = state.trials.filter(function(x) { return x.id !== t.id; });
+      saveState();
+      renderArchivedList();
+    });
+
+    btnGroup.appendChild(unarchiveBtn);
+    btnGroup.appendChild(deleteBtn);
+    div.appendChild(btnGroup);
     list.appendChild(div);
   });
 }
@@ -1633,22 +1727,84 @@ const dRate = document.getElementById('d-rate');
 const dTotalArea = document.getElementById('d-total-area');
 const dPlotSize = document.getElementById('d-plot-size');
 const riceRateCard = document.getElementById('rice-rate-card');
+const genericDistanceField = document.getElementById('generic-planting-distance-field');
+const ricePlantingDistanceField = document.getElementById('rice-planting-distance-field');
+const dPlantingDistanceRice = document.getElementById('d-planting-distance-rice');
+const dPlantingDistanceRiceOther = document.getElementById('d-planting-distance-rice-other');
+const solanaceousDistanceField = document.getElementById('solanaceous-planting-distance-field');
+const dPlantingDistancePlant = document.getElementById('d-planting-distance-plant');
+const dPlantingDistancePlantOther = document.getElementById('d-planting-distance-plant-other');
+const dPlantingDistanceRow = document.getElementById('d-planting-distance-row');
+const dPlantingDistanceRowOther = document.getElementById('d-planting-distance-row-other');
+
+function setDropdownWithOther(selectEl, otherInputEl, storedVal, recommendedVals) {
+  if (storedVal && recommendedVals.indexOf(storedVal) === -1) {
+    selectEl.value = '__other__';
+    otherInputEl.style.display = 'block';
+    otherInputEl.value = storedVal;
+  } else {
+    selectEl.value = storedVal || recommendedVals[0];
+    otherInputEl.style.display = 'none';
+    otherInputEl.value = '';
+  }
+}
 
 function renderDetails() {
   const t = currentTrial(); if (!t) return;
   dTitle.value = t.details.title || '';
   dCrop.value = t.details.crop || '';
   dVariety.value = t.details.variety || '';
-  dPlantingDistance.value = t.details.plantingDistance || '';
   dSowing.value = t.details.sowing || '';
+  document.getElementById('d-sowing-display').textContent = fmtMMDDYYYY(t.details.sowing);
   dPlanting.value = t.details.planting || '';
+  document.getElementById('d-planting-display').textContent = fmtMMDDYYYY(t.details.planting);
   dTrial.value = t.details.trialType || '';
   dRate.value = t.details.rateKey || 'wet';
   dTotalArea.value = t.details.totalAreaSqm || '';
   dPlotSize.value = t.details.plotSizeSqm || '';
   riceRateCard.style.display = t.details.cropKey === 'rice' ? 'block' : 'none';
+
+  // Crop-conditional planting distance UI
+  genericDistanceField.style.display = 'none';
+  ricePlantingDistanceField.style.display = 'none';
+  solanaceousDistanceField.style.display = 'none';
+  if (t.details.cropKey === 'rice') {
+    ricePlantingDistanceField.style.display = 'block';
+    setDropdownWithOther(dPlantingDistanceRice, dPlantingDistanceRiceOther, t.details.plantingDistance, ['20 cm', '25 cm']);
+  } else if (isSolanaceous(t.details.cropKey)) {
+    solanaceousDistanceField.style.display = 'block';
+    setDropdownWithOther(dPlantingDistancePlant, dPlantingDistancePlantOther, t.details.plantingDistancePlant, ['50 cm']);
+    setDropdownWithOther(dPlantingDistanceRow, dPlantingDistanceRowOther, t.details.plantingDistanceRow, ['100 cm']);
+  } else {
+    genericDistanceField.style.display = 'block';
+    dPlantingDistance.value = t.details.plantingDistance || '';
+  }
+
   renderLocationStatus(t);
 }
+
+function wireDistanceDropdown(selectEl, otherInputEl, stateKey) {
+  selectEl.addEventListener('change', function() {
+    const t = currentTrial(); if (!t) return;
+    if (selectEl.value === '__other__') {
+      otherInputEl.style.display = 'block';
+      otherInputEl.focus();
+    } else {
+      otherInputEl.style.display = 'none';
+      otherInputEl.value = '';
+      t.details[stateKey] = selectEl.value;
+      saveState();
+    }
+  });
+  otherInputEl.addEventListener('change', function() {
+    const t = currentTrial(); if (!t) return;
+    t.details[stateKey] = otherInputEl.value;
+    saveState();
+  });
+}
+wireDistanceDropdown(dPlantingDistanceRice, dPlantingDistanceRiceOther, 'plantingDistance');
+wireDistanceDropdown(dPlantingDistancePlant, dPlantingDistancePlantOther, 'plantingDistancePlant');
+wireDistanceDropdown(dPlantingDistanceRow, dPlantingDistanceRowOther, 'plantingDistanceRow');
 
 const locationStatusEl = document.getElementById('location-status');
 const locationMapWrap = document.getElementById('location-map-wrap');
@@ -1690,8 +1846,8 @@ function updateHeaderSub() {
   if (t.details.trialType) parts.push(t.details.trialType + ' Trial');
   headerSub.textContent = parts.length ? parts.join(' · ') : 'Tap Details to fill in trial info';
 }
-[dTitle, dCrop, dVariety, dPlantingDistance, dSowing, dTrial].forEach(function(el, i) {
-  const keys = ['title','crop','variety','plantingDistance','sowing','trialType'];
+[dTitle, dCrop, dVariety, dTrial].forEach(function(el, i) {
+  const keys = ['title','crop','variety','trialType'];
   el.addEventListener('change', function() {
     const t = currentTrial(); if (!t) return;
     t.details[keys[i]] = el.value;
@@ -1700,9 +1856,21 @@ function updateHeaderSub() {
     if (keys[i] === 'crop' || keys[i] === 'title') appTitle.textContent = cropMeta(t.details.cropKey).emoji + ' ' + displayTitle(t);
   });
 });
+dPlantingDistance.addEventListener('change', function() {
+  const t = currentTrial(); if (!t) return;
+  t.details.plantingDistance = dPlantingDistance.value;
+  saveState();
+});
+dSowing.addEventListener('change', function() {
+  const t = currentTrial(); if (!t) return;
+  t.details.sowing = dSowing.value;
+  document.getElementById('d-sowing-display').textContent = fmtMMDDYYYY(dSowing.value);
+  saveState();
+});
 dPlanting.addEventListener('change', function() {
   const t = currentTrial(); if (!t) return;
   t.details.planting = dPlanting.value;
+  document.getElementById('d-planting-display').textContent = fmtMMDDYYYY(dPlanting.value);
   saveState();
   renderApplication();
   renderMaintenance();
@@ -1902,25 +2070,42 @@ maProductSelect.addEventListener('change', function() {
   }
 });
 
+const maintAddBackdrop = document.getElementById('maint-add-backdrop');
+
+function openMaintAddModal() {
+  maintAddCard.style.display = 'block';
+  maintAddCard.classList.add('sheet-open');
+  maintAddBackdrop.style.display = 'block';
+  maintAddToggleBtn.textContent = '×';
+  maintAddToggleBtn.classList.add('open');
+  maintAddToggleBtn.title = 'Cancel';
+  document.getElementById('ma-name').value = '';
+  document.getElementById('ma-date').value = todayStr();
+  document.getElementById('ma-notes').value = '';
+  document.getElementById('ma-done').checked = false;
+  maRepeat.value = '0';
+  maRepeatCountField.style.display = 'none';
+  maType.value = 'pest';
+  populateMaProductSelect();
+  maProductSelect.value = '';
+}
+
+function closeMaintAddModal() {
+  maintAddCard.style.display = 'none';
+  maintAddCard.classList.remove('sheet-open');
+  maintAddBackdrop.style.display = 'none';
+  maintAddToggleBtn.textContent = '+';
+  maintAddToggleBtn.classList.remove('open');
+  maintAddToggleBtn.title = 'Add Item';
+}
+
 maintAddToggleBtn.addEventListener('click', function() {
-  const showing = maintAddCard.style.display === 'block';
-  maintAddCard.style.display = showing ? 'none' : 'block';
-  maintAddToggleBtn.textContent = showing ? '+' : '×';
-  maintAddToggleBtn.classList.toggle('open', !showing);
-  maintAddToggleBtn.title = showing ? 'Add Item' : 'Cancel';
-  if (!showing) {
-    document.getElementById('ma-name').value = '';
-    document.getElementById('ma-date').value = todayStr();
-    document.getElementById('ma-notes').value = '';
-    document.getElementById('ma-done').checked = false;
-    maRepeat.value = '0';
-    maRepeatCountField.style.display = 'none';
-    maType.value = 'pest';
-    populateMaProductSelect();
-    maProductSelect.value = '';
-    maintAddCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  }
+  const showing = maintAddCard.classList.contains('sheet-open');
+  if (showing) closeMaintAddModal();
+  else openMaintAddModal();
 });
+maintAddBackdrop.addEventListener('click', closeMaintAddModal);
+
 maRepeat.addEventListener('change', function() {
   maRepeatCountField.style.display = maRepeat.value !== '0' ? 'block' : 'none';
 });
@@ -1945,10 +2130,7 @@ document.getElementById('ma-save-btn').addEventListener('click', function() {
     });
   }
   saveState();
-  maintAddCard.style.display = 'none';
-  maintAddToggleBtn.textContent = '+';
-  maintAddToggleBtn.classList.remove('open');
-  maintAddToggleBtn.title = 'Add Item';
+  closeMaintAddModal();
   renderMaintenance();
   renderOverview();
 });
@@ -2015,10 +2197,19 @@ function renderPresetChecklist() {
   });
 }
 
+function populatePfCropSelect() {
+  const select = document.getElementById('pf-crop');
+  select.innerHTML = '<option value="">Any crop</option>' + CROPS.map(function(c) {
+    return '<option value="' + c.key + '">' + c.emoji + ' ' + c.label + '</option>';
+  }).join('');
+}
+
 function openPresetForm(existingPreset) {
   presetFormCard.style.display = 'block';
   editingPresetId = existingPreset ? existingPreset.id : null;
   document.getElementById('pf-name').value = existingPreset ? existingPreset.name : '';
+  populatePfCropSelect();
+  document.getElementById('pf-crop').value = existingPreset && existingPreset.cropKey ? existingPreset.cropKey : '';
   presetDraftItems = existingPreset ? existingPreset.items.map(function(it) { return Object.assign({}, it); }) : [];
   presetDraftSlots = existingPreset && existingPreset.slots ? existingPreset.slots.map(function(s) { return Object.assign({}, s); }) : [];
   currentPresetCat = 'fertilizer';
@@ -2097,11 +2288,12 @@ document.getElementById('pf-save-btn').addEventListener('click', function() {
   const name = document.getElementById('pf-name').value.trim();
   if (!name) { alert('Enter a preset name first.'); return; }
   if (!presetDraftItems.length && !presetDraftSlots.length) { alert('Add at least one product or slot to this preset.'); return; }
+  const cropKey = document.getElementById('pf-crop').value;
   if (editingPresetId) {
     const existing = presets.find(function(p) { return p.id === editingPresetId; });
-    if (existing) { existing.name = name; existing.items = presetDraftItems; existing.slots = presetDraftSlots; }
+    if (existing) { existing.name = name; existing.cropKey = cropKey; existing.items = presetDraftItems; existing.slots = presetDraftSlots; }
   } else {
-    presets.push({ id: 'preset_' + Date.now(), name: name, items: presetDraftItems, slots: presetDraftSlots });
+    presets.push({ id: 'preset_' + Date.now(), name: name, cropKey: cropKey, items: presetDraftItems, slots: presetDraftSlots });
   }
   savePresets();
   presetFormCard.style.display = 'none';
@@ -2116,12 +2308,31 @@ function renderPresetsList() {
     presetsList.innerHTML = '<div class="empty-state">No presets yet. Build one — e.g. "Rice Herbicide" — with products, timing, and frequency, then apply it to any trial.</div>';
     return;
   }
+
+  // Group by crop: known crops first (in CROPS order), then "Any crop" last
+  const groups = CROPS.map(function(c) { return { key: c.key, label: c.emoji + ' ' + c.label, presets: [] }; });
+  const anyCropGroup = { key: '', label: '🌐 Any Crop', presets: [] };
   presets.forEach(function(preset) {
-    const div = document.createElement('div');
-    div.className = 'plan-entry';
-    div.innerHTML = '<div><div class="plan-entry-name">' + preset.name + '</div><div class="plan-entry-meta">' + preset.items.length + ' product' + (preset.items.length !== 1 ? 's' : '') + '</div></div><div class="plan-entry-actions"><button class="rate-edit-btn" data-id="' + preset.id + '">Edit</button><button class="maint-remove-btn" data-id="' + preset.id + '">Remove</button></div>';
-    presetsList.appendChild(div);
+    const g = groups.find(function(gr) { return gr.key === (preset.cropKey || ''); });
+    if (g) g.presets.push(preset);
+    else anyCropGroup.presets.push(preset);
   });
+  groups.push(anyCropGroup);
+
+  groups.filter(function(g) { return g.presets.length; }).forEach(function(g) {
+    const heading = document.createElement('div');
+    heading.className = 'section-label';
+    heading.textContent = g.label;
+    presetsList.appendChild(heading);
+    g.presets.forEach(function(preset) {
+      const div = document.createElement('div');
+      div.className = 'plan-entry';
+      const partCount = preset.items.length + (preset.slots ? preset.slots.length : 0);
+      div.innerHTML = '<div><div class="plan-entry-name">' + preset.name + '</div><div class="plan-entry-meta">' + partCount + ' item' + (partCount !== 1 ? 's' : '') + '</div></div><div class="plan-entry-actions"><button class="rate-edit-btn" data-id="' + preset.id + '">Edit</button><button class="maint-remove-btn" data-id="' + preset.id + '">Remove</button></div>';
+      presetsList.appendChild(div);
+    });
+  });
+
   presetsList.querySelectorAll('.rate-edit-btn').forEach(function(btn) {
     btn.addEventListener('click', function() {
       const preset = presets.find(function(p) { return p.id === btn.dataset.id; });
@@ -2147,11 +2358,19 @@ applyPresetBtn.addEventListener('click', function() {
   const showing = applyPresetCard.style.display === 'block';
   applyPresetCard.style.display = showing ? 'none' : 'block';
   if (!showing) {
+    const t = currentTrial();
     if (!presets.length) {
       applyPresetSelect.innerHTML = '<option value="">— No presets saved yet, build one under Presets —</option>';
     } else {
-      applyPresetSelect.innerHTML = '<option value="">— Choose a preset —</option>' + presets.map(function(p) {
-        return '<option value="' + p.id + '">' + p.name + ' (' + p.items.length + ' products)</option>';
+      const matching = t ? presets.filter(function(p) { return p.cropKey === t.details.cropKey; }) : [];
+      const generic = presets.filter(function(p) { return !p.cropKey; });
+      const others = presets.filter(function(p) { return p.cropKey && (!t || p.cropKey !== t.details.cropKey); });
+      const ordered = matching.concat(generic).concat(others);
+      applyPresetSelect.innerHTML = '<option value="">— Choose a preset —</option>' + ordered.map(function(p) {
+        const partCount = p.items.length + (p.slots ? p.slots.length : 0);
+        const isMatch = t && p.cropKey === t.details.cropKey;
+        const label = (isMatch ? '' : (p.cropKey ? '[' + cropMeta(p.cropKey).label + '] ' : '[Any crop] '));
+        return '<option value="' + p.id + '">' + label + p.name + ' (' + partCount + ' items)</option>';
       }).join('');
     }
   }
