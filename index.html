@@ -35,6 +35,15 @@
     font-size:1em; padding:9px; border-radius:6px; border:1px solid #ccc; width:100%; background:#fff; color:#1f2a1f;
   }
   .field-hint { font-size:0.75em; color:#889; margin-top:4px; }
+  #panel-details.details-locked input, #panel-details.details-locked select {
+    background: #f4f6f2;
+    color: #556;
+    border-color: #e3e8df;
+    pointer-events: none;
+  }
+  #panel-details.details-locked .add-btn.secondary:not(#details-lock-toggle) { pointer-events: none; opacity: 0.5; }
+  #panel-details.details-locked .delete-trial-btn { pointer-events: none; opacity: 0.5; }
+  #details-lock-toggle.editing { background: #a3441d; }
   .section-label { font-weight:700; font-size:0.8em; color:#2e5e2e; text-transform:uppercase; letter-spacing:0.03em; margin:18px 0 8px; }
   .section-label:first-child { margin-top:0; }
   .checkbox-row { display:flex; align-items:center; gap:8px; }
@@ -149,7 +158,15 @@
   .reminder-item .tag { margin-left:0; }
   .reminder-item.reminder-done { opacity:0.5; text-decoration:line-through; }
   .reminders-empty { text-align:center; color:#889; font-size:0.85em; padding:10px 0 18px; }
-  .trial-icon { font-size:1.8em; width:44px; height:44px; display:flex; align-items:center; justify-content:center; background:#e3f1e3; border-radius:10px; flex-shrink:0; }
+  .home-cal-summary-row { background:#fff; border-radius:10px; padding:10px 12px; box-shadow:0 1px 4px rgba(0,0,0,0.08); margin-bottom:8px; cursor:pointer; }
+  .home-cal-summary-head { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .home-cal-summary-title { font-size:0.85em; font-weight:600; color:#1f2a1f; }
+  .home-cal-summary-trial { font-size:0.75em; color:#667; margin-top:2px; }
+  .home-cal-detail { display:none; margin-top:8px; padding-top:8px; border-top:1px dashed #e3e8df; font-size:0.8em; color:#445; line-height:1.4; }
+  .home-cal-summary-row.expanded .home-cal-detail { display:block; }
+  .home-cal-arrow { color:#aab; font-size:0.9em; }
+  .trial-icon { font-size:1.8em; width:44px; height:44px; display:flex; align-items:center; justify-content:center; background:#e3f1e3; border-radius:10px; flex-shrink:0; position:relative; }
+  .trial-pest-badge { position:absolute; bottom:-5px; right:-5px; font-size:11px; width:20px; height:20px; display:flex; align-items:center; justify-content:center; background:#fff; border-radius:50%; box-shadow:0 1px 3px rgba(0,0,0,0.25); }
   .trial-info { flex:1; min-width:0; }
   .trial-name { font-weight:700; font-size:1em; color:#1f2a1f; }
   .trial-dat-badge { display:inline-block; font-family: -apple-system, Segoe UI, Roboto, monospace; font-size:0.72em; font-weight:700; letter-spacing:0.02em; color:#2e5e2e; background:#e3f1e3; border-radius:5px; padding:2px 7px; margin-left:6px; vertical-align:middle; }
@@ -193,8 +210,12 @@
   .rate-crop-name { font-weight:700; font-size:0.82em; color:#2e5e2e; }
   .rate-crop-row { font-size:0.78em; color:#556; margin-top:2px; }
   .rate-crop-row b { color:#1f2a1f; }
+  .rate-target-block { border-top:1px dashed #dde3d9; margin-top:6px; padding-top:6px; }
+  .rate-target-block:first-of-type { border-top:none; margin-top:2px; padding-top:0; }
   .rf-crop-row { border:1px solid #e3e8df; border-radius:8px; padding:10px; margin-bottom:10px; position:relative; }
   .rf-crop-row .remove-crop-row-btn { position:absolute; top:8px; right:8px; background:#fbe6dd; color:#a3441d; border:none; border-radius:6px; padding:4px 8px; font-size:0.7em; font-weight:600; cursor:pointer; }
+  .rf-target-row { background:#fafbf8; border:1px solid #e3e8df; border-radius:8px; padding:10px; margin-top:8px; position:relative; }
+  .rf-target-row .remove-target-row-btn { position:absolute; top:8px; right:8px; background:#fbe6dd; color:#a3441d; border:none; border-radius:6px; padding:4px 8px; font-size:0.68em; font-weight:600; cursor:pointer; }
 </style>
 </head>
 <body>
@@ -233,6 +254,21 @@
     <div class="home-nav-btn" id="go-archived-btn">Archived</div>
     <div class="home-nav-btn" id="go-settings-btn">Settings</div>
   </div>
+
+  <div class="section-label" style="display:flex; justify-content:space-between; align-items:center; cursor:pointer;" id="home-cal-toggle">
+    <span>📅 Calendar (All Trials)</span>
+    <span id="home-cal-toggle-arrow">▾</span>
+  </div>
+  <div id="home-cal-section" style="display:none;">
+    <div class="cal-nav">
+      <button id="home-cal-prev">‹</button>
+      <div class="cal-title" id="home-cal-title"></div>
+      <button id="home-cal-next">›</button>
+    </div>
+    <div class="cal-grid" id="home-cal-grid"></div>
+    <div id="home-cal-day-summary"></div>
+  </div>
+
   <div id="reminders-section"></div>
   <div id="trial-list"></div>
   <button class="new-trial-btn" id="new-trial-btn">+ New Trial</button>
@@ -256,6 +292,13 @@
         <option value="Herbicide">Herbicide</option>
         <option value="Fungicide">Fungicide</option>
       </select>
+    </div>
+    <div class="field">
+      <label for="nt-target-pest">Target Pest</label>
+      <select id="nt-target-pest">
+        <option value="">— Select —</option>
+      </select>
+      <input type="text" id="nt-target-pest-other" placeholder="e.g. Leaf folder" style="display:none; margin-top:8px;">
     </div>
     <button class="add-btn" id="create-trial-btn">Create Trial</button>
   </div>
@@ -412,6 +455,7 @@
   </div>
 
   <div class="panel" id="panel-details">
+    <button class="add-btn" id="details-lock-toggle" style="margin-bottom:14px;">✏️ Edit Details</button>
     <div class="card">
       <div class="field">
         <label for="d-title">Trial Title (optional)</label>
@@ -434,6 +478,13 @@
           <option value="Herbicide">Herbicide</option>
           <option value="Fungicide">Fungicide</option>
         </select>
+      </div>
+      <div class="field">
+        <label for="d-target-pest">Target Pest</label>
+        <select id="d-target-pest">
+          <option value="">— Select —</option>
+        </select>
+        <input type="text" id="d-target-pest-other" placeholder="e.g. Leaf folder" style="display:none; margin-top:8px;">
       </div>
 
       <!-- Generic planting distance (non-rice, non-Solanaceous crops) -->
@@ -474,14 +525,6 @@
       </div>
 
       <div class="field">
-        <label>Trial Location</label>
-        <button class="add-btn secondary" id="set-location-btn" type="button" style="margin-top:0;">📍 Set Trial Location (GPS)</button>
-        <div class="field-hint" id="location-status">No location set yet.</div>
-        <div id="location-map-wrap" style="display:none; margin-top:8px; border-radius:8px; overflow:hidden; border:1px solid #e3e8df;">
-          <iframe id="location-map" width="100%" height="160" frameborder="0" style="display:block;"></iframe>
-        </div>
-      </div>
-      <div class="field">
         <label for="d-sowing">Seedling Sowing Date</label>
         <div class="date-field-wrap">
           <div class="date-field-display" id="d-sowing-display">Set date</div>
@@ -493,6 +536,14 @@
         <div class="date-field-wrap">
           <div class="date-field-display" id="d-planting-display">Set date</div>
           <input type="date" id="d-planting" class="date-field-native">
+        </div>
+      </div>
+      <div class="field">
+        <label>Trial Location</label>
+        <button class="add-btn secondary" id="set-location-btn" type="button" style="margin-top:0;">📍 Set Trial Location (GPS)</button>
+        <div class="field-hint" id="location-status">No location set yet.</div>
+        <div id="location-map-wrap" style="display:none; margin-top:8px; border-radius:8px; overflow:hidden; border:1px solid #e3e8df;">
+          <iframe id="location-map" width="100%" height="160" frameborder="0" style="display:block;"></iframe>
         </div>
       </div>
     </div>
@@ -566,6 +617,11 @@
         </select>
         <div class="field-hint">Picking a product fills in the name and rate/timing below automatically.</div>
       </div>
+      <div class="field" id="ma-target-field" style="display:none;">
+        <label>Which target?</label>
+        <select id="ma-target-select"></select>
+        <div class="field-hint">This product has more than one target saved for this crop — each has its own recommended timing/rate.</div>
+      </div>
       <div class="field">
         <label>Product / Activity Name</label>
         <input type="text" id="ma-name" placeholder="e.g. Fungicide spray">
@@ -604,7 +660,7 @@
 </div>
 
 <script>
-const APP_VERSION = '3.9';
+const APP_VERSION = '4.5';
 const STORAGE_KEY = 'trial-calendar-state-v3';
 
 // ---- Supabase cloud sync ----
@@ -805,6 +861,25 @@ const CROPS = [
   { key: 'other', label: 'Other', emoji: '🌱' },
 ];
 function cropMeta(key) { return CROPS.find(c => c.key === key) || CROPS[CROPS.length - 1]; }
+
+const TARGET_PESTS = [
+  { key: 'fsb', label: 'Fruit and Shoot Borer', emoji: '🐛' },
+  { key: 'whitefly', label: 'Whitefly', emoji: '🪰' },
+  { key: 'bph', label: 'Brown Planthopper', emoji: '🦗' },
+  { key: 'rbb', label: 'Rice Black Bug', emoji: '🪲' },
+  { key: 'nematode', label: 'Nematode', emoji: '🪱' },
+  { key: 'other', label: 'Other (specify)', emoji: '🔍' },
+];
+function targetPestMeta(t) {
+  if (!t.details.targetPestKey) return null;
+  const found = TARGET_PESTS.find(function(p) { return p.key === t.details.targetPestKey; });
+  if (!found) return null;
+  if (found.key === 'other') {
+    return t.details.targetPestOther ? { label: t.details.targetPestOther, emoji: found.emoji } : null;
+  }
+  return found;
+}
+
 function displayTitle(t) { return (t.details.title && t.details.title.trim()) ? t.details.title.trim() : t.details.crop; }
 function currentDatBadge(t) {
   if (!t.details.planting) return '';
@@ -836,15 +911,28 @@ function getMatchingProducts(keyword, category) {
   const kw = keyword.toLowerCase();
   const cat = category || 'insecticide';
   return (rateLibrary[cat] || []).filter(function(p) {
-    return (p.cropRates || []).some(function(cr) { return (cr.target || '').toLowerCase().indexOf(kw) !== -1; });
+    return (p.cropRates || []).some(function(cr) {
+      return (cr.targets || []).some(function(t) { return (t.target || '').toLowerCase().indexOf(kw) !== -1; });
+    });
   });
 }
 
-// Find a matching product's rate for the current trial's crop (case-insensitive match on crop name)
+// Find the crop block (with its list of target-specific rates) for the current trial's crop
 function findCropRateForProduct(product, cropName) {
   if (!product || !product.cropRates || !cropName) return null;
   const cn = cropName.toLowerCase();
   return product.cropRates.find(function(cr) { return (cr.crop || '').toLowerCase() === cn; }) || null;
+}
+
+// Within a crop block, find the specific target-rate matching a keyword (falls back to the first target)
+function findMatchingTarget(cropBlock, keyword) {
+  if (!cropBlock || !cropBlock.targets || !cropBlock.targets.length) return null;
+  if (keyword) {
+    const kw = keyword.toLowerCase();
+    const match = cropBlock.targets.find(function(t) { return (t.target || '').toLowerCase().indexOf(kw) !== -1; });
+    if (match) return match;
+  }
+  return cropBlock.targets[0];
 }
 
 
@@ -933,13 +1021,13 @@ function todayStr() {
   return y + '-' + m + '-' + day;
 }
 
-function makeTrial(cropKey, variety, trialType) {
+function makeTrial(cropKey, variety, trialType, targetPestKey, targetPestOther) {
   const meta = cropMeta(cropKey);
   return {
     id: 't' + Date.now(),
     details: {
       title: '', crop: meta.label, cropKey: cropKey, variety: variety || '', sowing: '', planting: todayStr(), trialType: trialType || '',
-      plantingDistance: '', plantingDistancePlant: '', plantingDistanceRow: '', location: null, rateKey: 'wet', totalAreaSqm: '', plotSizeSqm: ''
+      plantingDistance: '', plantingDistancePlant: '', plantingDistanceRow: '', targetPestKey: targetPestKey || '', targetPestOther: targetPestOther || '', location: null, locationName: '', rateKey: 'wet', totalAreaSqm: '', plotSizeSqm: ''
     },
     applications: [
       { id:'a1', label:'A', date: todayStr(), doneApp:false, assess:{1:false,3:false,7:false} }
@@ -958,7 +1046,7 @@ let rateLibrary = { fertilizer: [], insecticide: [], herbicide: [], fungicide: [
 function migrateRateEntry(e) {
   if (typeof e.activeIngredient !== 'string') e.activeIngredient = '';
   if (typeof e.formulation !== 'string') e.formulation = '';
-  // Old format had flat rateTank/rateHa/timing fields — migrate to cropRates array (unspecified crop)
+  // Oldest format had flat rateTank/rateHa/timing fields at product level — migrate to cropRates array (unspecified crop)
   if (!e.cropRates) {
     e.cropRates = [];
     if (e.rateTank || e.rateHa || e.timing) {
@@ -967,10 +1055,22 @@ function migrateRateEntry(e) {
     delete e.rateTank; delete e.rateHa; delete e.timing;
   }
   e.cropRates.forEach(function(cr) {
-    if (cr.intervalDays === undefined) cr.intervalDays = null;
-    if (typeof cr.target !== 'string') cr.target = e.targetPest || '';
+    if (typeof cr.target !== 'string' && !cr.targets) cr.target = e.targetPest || '';
+    // Older format: one flat target/tank/ha/timing/intervalDays per crop — migrate into a targets array (allows multiple per crop now)
+    if (!cr.targets) {
+      cr.targets = [{
+        target: cr.target || '',
+        tank: cr.tank || '',
+        ha: cr.ha || '',
+        timing: cr.timing || '',
+        intervalDays: (cr.intervalDays === undefined) ? null : cr.intervalDays,
+        startDat: null
+      }];
+      delete cr.target; delete cr.tank; delete cr.ha; delete cr.timing; delete cr.intervalDays;
+    }
+    cr.targets.forEach(function(tg) { if (tg.startDat === undefined) tg.startDat = null; });
   });
-  delete e.targetPest; // moved to per-crop
+  delete e.targetPest; // moved to per-target
   return e;
 }
 function loadRateLibrary() {
@@ -1109,8 +1209,11 @@ function loadState() {
           if (typeof t.details.title !== 'string') t.details.title = '';
           if (typeof t.details.plantingDistance !== 'string') t.details.plantingDistance = '';
           if (t.details.location === undefined) t.details.location = null;
+          if (typeof t.details.locationName !== 'string') t.details.locationName = '';
           if (typeof t.details.plantingDistancePlant !== 'string') t.details.plantingDistancePlant = '';
           if (typeof t.details.plantingDistanceRow !== 'string') t.details.plantingDistanceRow = '';
+          if (typeof t.details.targetPestKey !== 'string') t.details.targetPestKey = '';
+          if (typeof t.details.targetPestOther !== 'string') t.details.targetPestOther = '';
           if (typeof t.archived !== 'boolean') t.archived = false;
         });
       }
@@ -1221,7 +1324,17 @@ function showNewTrial() {
   appTitle.textContent = 'New Trial';
   headerSub.textContent = 'Set up a new trial';
   renderCropPicker();
+  const ntTargetPest = document.getElementById('nt-target-pest');
+  ntTargetPest.innerHTML = '<option value="">— Select —</option>' + TARGET_PESTS.map(function(p) {
+    return '<option value="' + p.key + '">' + p.emoji + ' ' + p.label + '</option>';
+  }).join('');
+  ntTargetPest.value = '';
+  document.getElementById('nt-target-pest-other').style.display = 'none';
+  document.getElementById('nt-target-pest-other').value = '';
 }
+document.getElementById('nt-target-pest').addEventListener('change', function() {
+  document.getElementById('nt-target-pest-other').style.display = (this.value === 'other') ? 'block' : 'none';
+});
 
 let currentRateCat = 'fertilizer';
 function showRates() {
@@ -1376,6 +1489,7 @@ function attachLongPress(el, onLongPress) {
 
 function renderHome() {
   renderReminders();
+  renderHomeCalendar();
   trialList.innerHTML = '';
   const active = state.trials.filter(function(t) { return !t.archived; });
   if (!active.length) {
@@ -1390,7 +1504,9 @@ function renderHome() {
     if (t.details.variety) metaParts.push(t.details.variety);
     if (t.details.trialType) metaParts.push(t.details.trialType + ' Trial');
     metaParts.push('Planted ' + (t.details.planting || '—'));
-    div.innerHTML = '<div class="trial-icon">' + meta.emoji + '</div><div class="trial-info"><div class="trial-name">' + displayTitle(t) + currentDatBadge(t) + '</div><div class="trial-meta">' + metaParts.join(' · ') + '</div></div><div class="trial-arrow">›</div>';
+    const pestMeta = targetPestMeta(t);
+    const pestBadgeHtml = pestMeta ? '<span class="trial-pest-badge" title="' + pestMeta.label + '">' + pestMeta.emoji + '</span>' : '';
+    div.innerHTML = '<div class="trial-icon">' + meta.emoji + pestBadgeHtml + '</div><div class="trial-info"><div class="trial-name">' + displayTitle(t) + currentDatBadge(t) + '</div><div class="trial-meta">' + metaParts.join(' · ') + '</div></div><div class="trial-arrow">›</div>';
     div.addEventListener('click', function() { showTrial(t.id); });
     attachLongPress(div, function() {
       if (confirm('Archive "' + displayTitle(t) + '"? It will be hidden from your home screen. You can restore it from Archived.')) {
@@ -1477,6 +1593,101 @@ function renderReminders() {
   el.appendChild(wrap);
 }
 
+// ================= HOME CALENDAR (aggregated across all active trials) =================
+let homeCalMonthOffset = 0;
+let homeCalOpen = false;
+
+document.getElementById('home-cal-toggle').addEventListener('click', function() {
+  homeCalOpen = !homeCalOpen;
+  document.getElementById('home-cal-section').style.display = homeCalOpen ? 'block' : 'none';
+  document.getElementById('home-cal-toggle-arrow').textContent = homeCalOpen ? '▴' : '▾';
+  if (homeCalOpen) renderHomeCalendar();
+});
+document.getElementById('home-cal-prev').addEventListener('click', function() { homeCalMonthOffset--; renderHomeCalendar(); });
+document.getElementById('home-cal-next').addEventListener('click', function() { homeCalMonthOffset++; renderHomeCalendar(); });
+
+function collectAllActiveTrialEvents() {
+  const events = [];
+  state.trials.filter(function(t) { return !t.archived; }).forEach(function(t) {
+    const meta = cropMeta(t.details.cropKey);
+    collectTrialEvents(t).forEach(function(e) {
+      events.push(Object.assign({}, e, { trialId: t.id, trialName: displayTitle(t), trialEmoji: meta.emoji }));
+    });
+  });
+  return events;
+}
+
+function renderHomeCalendar() {
+  if (!homeCalOpen) return;
+  const now = new Date();
+  const viewDate = new Date(now.getFullYear(), now.getMonth() + homeCalMonthOffset, 1);
+  const year = viewDate.getFullYear();
+  const month = viewDate.getMonth();
+  document.getElementById('home-cal-title').textContent = viewDate.toLocaleDateString('en-US', { month:'long', year:'numeric' });
+
+  const events = collectAllActiveTrialEvents();
+  const firstDow = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  const grid = document.getElementById('home-cal-grid');
+  grid.innerHTML = '';
+  ['S','M','T','W','T','F','S'].forEach(function(d) {
+    const el = document.createElement('div');
+    el.className = 'cal-dow';
+    el.textContent = d;
+    grid.appendChild(el);
+  });
+  for (let i = 0; i < firstDow; i++) {
+    const el = document.createElement('div');
+    el.className = 'cal-day blank';
+    grid.appendChild(el);
+  }
+  for (let day = 1; day <= daysInMonth; day++) {
+    const dateObj = new Date(year, month, day);
+    const dayEvents = events.filter(function(e) { return sameDay(e.dateObj, dateObj); });
+    const el = document.createElement('div');
+    el.className = 'cal-day' + (dayEvents.length ? ' has-event' : '') + (isToday(dateObj) ? ' is-today' : '');
+    const types = Array.from(new Set(dayEvents.map(function(e) { return e.type; })));
+    el.innerHTML = '<span>' + day + '</span>' + (types.length ? '<div class="dot-row">' + types.map(function(ty) { return '<span class="cal-dot dot-' + ty + '"></span>'; }).join('') + '</div>' : '');
+    el.addEventListener('click', function() { renderHomeCalDaySummary(events, dateObj); });
+    grid.appendChild(el);
+  }
+
+  let target = null;
+  if (year === now.getFullYear() && month === now.getMonth()) target = now;
+  else {
+    const firstWithEvents = events.find(function(e) { return e.dateObj.getFullYear() === year && e.dateObj.getMonth() === month; });
+    target = firstWithEvents ? firstWithEvents.dateObj : null;
+  }
+  if (target) renderHomeCalDaySummary(events, target);
+  else document.getElementById('home-cal-day-summary').innerHTML = '<div class="none" style="text-align:center; color:#aab; font-size:0.85em; padding:16px;">No events this month</div>';
+}
+
+function renderHomeCalDaySummary(events, dateObj) {
+  const container = document.getElementById('home-cal-day-summary');
+  const dayEvents = events.filter(function(e) { return sameDay(e.dateObj, dateObj); });
+  if (!dayEvents.length) {
+    container.innerHTML = '<div class="none" style="text-align:center; color:#aab; font-size:0.85em; padding:16px;">No events on ' + fmt(dateObj) + '</div>';
+    return;
+  }
+  container.innerHTML = '<div class="field-hint" style="margin-bottom:8px;">' + fmt(dateObj) + ' — tap an item for full details</div>';
+  dayEvents.forEach(function(e, idx) {
+    const tagClass = e.type === 'fert' ? 'tag-fert' : (e.type === 'assess' ? 'tag-assess' : 'tag-pest');
+    const tagLabel = e.type === 'fert' ? 'FERTILIZER' : (e.type === 'assess' ? 'ASSESSMENT' : 'PEST');
+    const row = document.createElement('div');
+    row.className = 'home-cal-summary-row';
+    row.innerHTML = '<div class="home-cal-summary-head"><div><div class="home-cal-summary-title">' + (e.checked ? '✓ ' : '') + e.title + '<span class="tag ' + tagClass + '">' + tagLabel + '</span></div><div class="home-cal-summary-trial">' + e.trialEmoji + ' ' + e.trialName + '</div></div><div class="home-cal-arrow">▾</div></div><div class="home-cal-detail">' + e.note + '<div style="margin-top:8px;"><button class="add-btn secondary" style="margin-top:0; padding:8px;" data-trial-id="' + e.trialId + '">Open ' + e.trialName + '</button></div></div>';
+    row.addEventListener('click', function(ev) {
+      if (ev.target.tagName === 'BUTTON') return;
+      row.classList.toggle('expanded');
+    });
+    row.querySelector('button').addEventListener('click', function() {
+      showTrial(e.trialId);
+    });
+    container.appendChild(row);
+  });
+}
+
 function renderArchivedList() {
   const list = document.getElementById('archived-list');
   list.innerHTML = '';
@@ -1492,7 +1703,9 @@ function renderArchivedList() {
     const metaParts = [];
     if (t.details.variety) metaParts.push(t.details.variety);
     metaParts.push('Planted ' + (t.details.planting || '—'));
-    div.innerHTML = '<div class="trial-icon">' + meta.emoji + '</div><div class="trial-info"><div class="trial-name">' + displayTitle(t) + '</div><div class="trial-meta">' + metaParts.join(' · ') + '</div></div>';
+    const pestMeta2 = targetPestMeta(t);
+    const pestBadgeHtml2 = pestMeta2 ? '<span class="trial-pest-badge" title="' + pestMeta2.label + '">' + pestMeta2.emoji + '</span>' : '';
+    div.innerHTML = '<div class="trial-icon">' + meta.emoji + pestBadgeHtml2 + '</div><div class="trial-info"><div class="trial-name">' + displayTitle(t) + '</div><div class="trial-meta">' + metaParts.join(' · ') + '</div></div>';
 
     const btnGroup = document.createElement('div');
     btnGroup.style.display = 'flex';
@@ -1544,7 +1757,9 @@ function renderCropPicker() {
 document.getElementById('create-trial-btn').addEventListener('click', function() {
   const variety = document.getElementById('nt-variety').value;
   const trialType = document.getElementById('nt-trial').value;
-  const trial = makeTrial(selectedCropKey, variety, trialType);
+  const targetPestKey = document.getElementById('nt-target-pest').value;
+  const targetPestOther = document.getElementById('nt-target-pest-other').value;
+  const trial = makeTrial(selectedCropKey, variety, trialType, targetPestKey, targetPestOther);
   state.trials.push(trial);
   saveState();
   document.getElementById('nt-variety').value = '';
@@ -1569,23 +1784,39 @@ document.querySelectorAll('.rate-tab-btn').forEach(function(btn) {
   });
 });
 
-function addCropRow(cropVal, tankVal, haVal, timingVal, intervalVal, targetVal) {
-  const row = document.createElement('div');
-  row.className = 'rf-crop-row';
+function addTargetRow(targetsContainer, targetVal, tankVal, haVal, timingVal, intervalVal, startDatVal) {
   const isFert = rfCategory.value === 'fertilizer';
   const targetLabel = isFert ? 'Purpose / Nutrient (optional)' : 'Target Pest / Disease / Weed';
-  const targetPlaceholder = isFert ? 'e.g. N supplementation, Zinc correction' : 'e.g. Stemborer, other Lepidopterans';
-  row.innerHTML = '<button type="button" class="remove-crop-row-btn">Remove</button>' +
+  const targetPlaceholder = isFert ? 'e.g. N supplementation, Zinc correction' : 'e.g. Fly, BPH, Stemborer';
+  const row = document.createElement('div');
+  row.className = 'rf-target-row';
+  row.innerHTML = '<button type="button" class="remove-target-row-btn">Remove this target</button>' +
+    '<div class="field"><label>' + targetLabel + '</label><input type="text" class="rf-target-name-input" placeholder="' + targetPlaceholder + '" value="' + (targetVal || '') + '"></div>' +
+    '<div class="field"><label>Rate per Tank (ml)</label><input type="text" class="rf-target-tank-input" placeholder="e.g. 20 ml / 16L" value="' + (tankVal || '') + '"></div>' +
+    '<div class="field"><label>Rate per ha (ml)</label><input type="text" class="rf-target-ha-input" placeholder="e.g. 500 ml/ha" value="' + (haVal || '') + '"></div>' +
+    '<div class="field"><label>Recommended Start (DAT)</label><input type="number" class="rf-target-startdat-input" placeholder="e.g. 7" min="0" value="' + (startDatVal !== null && startDatVal !== undefined ? startDatVal : '') + '"><div class="field-hint">If set, picking this target in "+ Add Item" auto-calculates the date from your trial\'s Planting Date.</div></div>' +
+    '<div class="field"><label>Application Timing (notes)</label><input type="text" class="rf-target-timing-input" placeholder="e.g. 7 DAT" value="' + (timingVal || '') + '"></div>' +
+    '<div class="field"><label>Reapplication Interval (days, optional)</label><input type="number" class="rf-target-interval-input" placeholder="e.g. 14" min="1" value="' + (intervalVal || '') + '"></div>';
+  row.querySelector('.remove-target-row-btn').addEventListener('click', function() { row.remove(); });
+  targetsContainer.appendChild(row);
+}
+
+function addCropRow(cropVal, targets) {
+  const block = document.createElement('div');
+  block.className = 'rf-crop-row';
+  block.innerHTML = '<button type="button" class="remove-crop-row-btn">Remove Crop</button>' +
     '<div class="field"><label>Crop</label><input type="text" class="rf-crop-name-input" placeholder="e.g. Rice" value="' + (cropVal || '') + '"></div>' +
-    '<div class="field"><label>' + targetLabel + '</label><input type="text" class="rf-crop-target-input" placeholder="' + targetPlaceholder + '" value="' + (targetVal || '') + '"></div>' +
-    '<div class="field"><label>Rate per Tank (ml)</label><input type="text" class="rf-crop-tank-input" placeholder="e.g. 20 ml / 16L" value="' + (tankVal || '') + '"></div>' +
-    '<div class="field"><label>Rate per ha (ml)</label><input type="text" class="rf-crop-ha-input" placeholder="e.g. 500 ml/ha" value="' + (haVal || '') + '"></div>' +
-    '<div class="field"><label>Application Timing (notes)</label><input type="text" class="rf-crop-timing-input" placeholder="e.g. 7 &amp; 14 DAT" value="' + (timingVal || '') + '"></div>' +
-    '<div class="field"><label>Reapplication Interval (days, optional)</label><input type="number" class="rf-crop-interval-input" placeholder="e.g. 14" min="1" value="' + (intervalVal || '') + '"><div class="field-hint">If set, picking this product in "+ Add Item" auto-sets the repeat interval.</div></div>';
-  row.querySelector('.remove-crop-row-btn').addEventListener('click', function() {
-    row.remove();
+    '<div class="section-label" style="margin-top:14px; font-size:0.75em;">Targets for this crop</div>' +
+    '<div class="rf-targets-container"></div>' +
+    '<button type="button" class="add-btn secondary rf-add-target-btn" style="margin-top:8px;">+ Add Target</button>';
+  const targetsContainer = block.querySelector('.rf-targets-container');
+  const targetList = (targets && targets.length) ? targets : [{}];
+  targetList.forEach(function(t) {
+    addTargetRow(targetsContainer, t.target, t.tank, t.ha, t.timing, t.intervalDays, t.startDat);
   });
-  rfCropRows.appendChild(row);
+  block.querySelector('.remove-crop-row-btn').addEventListener('click', function() { block.remove(); });
+  block.querySelector('.rf-add-target-btn').addEventListener('click', function() { addTargetRow(targetsContainer); });
+  rfCropRows.appendChild(block);
 }
 document.getElementById('rf-add-crop-row-btn').addEventListener('click', function() { addCropRow(); });
 
@@ -1599,7 +1830,7 @@ function openRateForm(existingEntry) {
     document.getElementById('rf-ai').value = existingEntry.activeIngredient || '';
     document.getElementById('rf-formulation').value = existingEntry.formulation || '';
     (existingEntry.cropRates || []).forEach(function(cr) {
-      addCropRow(cr.crop, cr.tank, cr.ha, cr.timing, cr.intervalDays, cr.target);
+      addCropRow(cr.crop, cr.targets);
     });
     if (!existingEntry.cropRates || !existingEntry.cropRates.length) addCropRow();
   } else {
@@ -1621,15 +1852,21 @@ document.getElementById('rf-save-btn').addEventListener('click', function() {
   const formulation = document.getElementById('rf-formulation').value.trim();
 
   const cropRates = [];
-  rfCropRows.querySelectorAll('.rf-crop-row').forEach(function(row) {
-    const crop = row.querySelector('.rf-crop-name-input').value.trim();
-    const target = row.querySelector('.rf-crop-target-input').value.trim();
-    const tank = row.querySelector('.rf-crop-tank-input').value.trim();
-    const ha = row.querySelector('.rf-crop-ha-input').value.trim();
-    const timing = row.querySelector('.rf-crop-timing-input').value.trim();
-    const intervalRaw = row.querySelector('.rf-crop-interval-input').value.trim();
-    const intervalDays = intervalRaw ? parseInt(intervalRaw, 10) : null;
-    if (crop || target || tank || ha || timing || intervalDays) cropRates.push({ crop: crop, target: target, tank: tank, ha: ha, timing: timing, intervalDays: intervalDays });
+  rfCropRows.querySelectorAll('.rf-crop-row').forEach(function(block) {
+    const crop = block.querySelector('.rf-crop-name-input').value.trim();
+    const targets = [];
+    block.querySelectorAll('.rf-target-row').forEach(function(row) {
+      const target = row.querySelector('.rf-target-name-input').value.trim();
+      const tank = row.querySelector('.rf-target-tank-input').value.trim();
+      const ha = row.querySelector('.rf-target-ha-input').value.trim();
+      const timing = row.querySelector('.rf-target-timing-input').value.trim();
+      const intervalRaw = row.querySelector('.rf-target-interval-input').value.trim();
+      const intervalDays = intervalRaw ? parseInt(intervalRaw, 10) : null;
+      const startDatRaw = row.querySelector('.rf-target-startdat-input').value.trim();
+      const startDat = startDatRaw !== '' ? parseInt(startDatRaw, 10) : null;
+      if (target || tank || ha || timing || intervalDays || startDat !== null) targets.push({ target: target, tank: tank, ha: ha, timing: timing, intervalDays: intervalDays, startDat: startDat });
+    });
+    if (crop || targets.length) cropRates.push({ crop: crop, targets: targets });
   });
 
   if (!rateLibrary[category]) rateLibrary[category] = [];
@@ -1672,13 +1909,18 @@ function renderRatesList() {
     div.className = 'rate-entry';
     let cropBlocks = '';
     (e.cropRates || []).forEach(function(cr) {
-      let cropRows = '';
-      if (cr.target) cropRows += '<div class="rate-crop-row"><b>Target:</b> ' + cr.target + '</div>';
-      if (cr.tank) cropRows += '<div class="rate-crop-row"><b>Per tank:</b> ' + cr.tank + '</div>';
-      if (cr.ha) cropRows += '<div class="rate-crop-row"><b>Per ha:</b> ' + cr.ha + '</div>';
-      if (cr.timing) cropRows += '<div class="rate-crop-row"><b>Timing:</b> ' + cr.timing + '</div>';
-      if (cr.intervalDays) cropRows += '<div class="rate-crop-row"><b>Reapply every:</b> ' + cr.intervalDays + ' days</div>';
-      cropBlocks += '<div class="rate-crop-block"><div class="rate-crop-name">' + (cr.crop || 'Unspecified crop') + '</div>' + cropRows + '</div>';
+      let targetRows = '';
+      (cr.targets || []).forEach(function(t) {
+        let row = '';
+        if (t.target) row += '<div class="rate-crop-row"><b>Target:</b> ' + t.target + '</div>';
+        if (t.startDat !== null && t.startDat !== undefined) row += '<div class="rate-crop-row"><b>Start:</b> ' + t.startDat + ' DAT</div>';
+        if (t.tank) row += '<div class="rate-crop-row"><b>Per tank:</b> ' + t.tank + '</div>';
+        if (t.ha) row += '<div class="rate-crop-row"><b>Per ha:</b> ' + t.ha + '</div>';
+        if (t.timing) row += '<div class="rate-crop-row"><b>Timing:</b> ' + t.timing + '</div>';
+        if (t.intervalDays) row += '<div class="rate-crop-row"><b>Reapply every:</b> ' + t.intervalDays + ' days</div>';
+        targetRows += '<div class="rate-target-block">' + row + '</div>';
+      });
+      cropBlocks += '<div class="rate-crop-block"><div class="rate-crop-name">' + (cr.crop || 'Unspecified crop') + '</div>' + targetRows + '</div>';
     });
     div.innerHTML = '<div class="rate-entry-head"><div class="rate-entry-name">' + e.name + (e.formulation ? '<span class="rate-entry-formulation">' + e.formulation + '</span>' : '') + renderAiBadges(e.activeIngredient) + '</div><div class="rate-entry-actions"><button class="rate-edit-btn" data-id="' + e.id + '">Edit</button><button class="maint-remove-btn" data-id="' + e.id + '">Remove</button></div></div>' +
       cropBlocks;
@@ -1712,6 +1954,7 @@ document.querySelectorAll('.tab-btn[data-tab]').forEach(function(btn) {
     btn.classList.add('active');
     document.getElementById('panel-' + btn.dataset.tab).classList.add('active');
     if (btn.dataset.tab === 'overview') renderOverview();
+    if (btn.dataset.tab === 'details') setDetailsLocked(true);
     updateFabVisibility(btn.dataset.tab);
   });
 });
@@ -1723,6 +1966,23 @@ const dPlantingDistance = document.getElementById('d-planting-distance');
 const dSowing = document.getElementById('d-sowing');
 const dPlanting = document.getElementById('d-planting');
 const dTrial = document.getElementById('d-trial');
+const dTargetPest = document.getElementById('d-target-pest');
+const dTargetPestOther = document.getElementById('d-target-pest-other');
+dTargetPest.innerHTML = '<option value="">— Select —</option>' + TARGET_PESTS.map(function(p) {
+  return '<option value="' + p.key + '">' + p.emoji + ' ' + p.label + '</option>';
+}).join('');
+dTargetPest.addEventListener('change', function() {
+  const t = currentTrial(); if (!t) return;
+  t.details.targetPestKey = dTargetPest.value;
+  dTargetPestOther.style.display = dTargetPest.value === 'other' ? 'block' : 'none';
+  if (dTargetPest.value !== 'other') { t.details.targetPestOther = ''; dTargetPestOther.value = ''; }
+  saveState();
+});
+dTargetPestOther.addEventListener('change', function() {
+  const t = currentTrial(); if (!t) return;
+  t.details.targetPestOther = dTargetPestOther.value;
+  saveState();
+});
 const dRate = document.getElementById('d-rate');
 const dTotalArea = document.getElementById('d-total-area');
 const dPlotSize = document.getElementById('d-plot-size');
@@ -1749,8 +2009,27 @@ function setDropdownWithOther(selectEl, otherInputEl, storedVal, recommendedVals
   }
 }
 
+function setDetailsLocked(locked) {
+  const panel = document.getElementById('panel-details');
+  panel.classList.toggle('details-locked', locked);
+  const btn = document.getElementById('details-lock-toggle');
+  btn.textContent = locked ? '✏️ Edit Details' : '✓ Done Editing';
+  btn.classList.toggle('editing', !locked);
+}
+document.getElementById('details-lock-toggle').addEventListener('click', function() {
+  const panel = document.getElementById('panel-details');
+  const isLocked = panel.classList.contains('details-locked');
+  if (isLocked) {
+    setDetailsLocked(false);
+  } else {
+    if (document.activeElement) document.activeElement.blur();
+    setDetailsLocked(true);
+  }
+});
+
 function renderDetails() {
   const t = currentTrial(); if (!t) return;
+  setDetailsLocked(true);
   dTitle.value = t.details.title || '';
   dCrop.value = t.details.crop || '';
   dVariety.value = t.details.variety || '';
@@ -1759,6 +2038,9 @@ function renderDetails() {
   dPlanting.value = t.details.planting || '';
   document.getElementById('d-planting-display').textContent = fmtMMDDYYYY(t.details.planting);
   dTrial.value = t.details.trialType || '';
+  dTargetPest.value = t.details.targetPestKey || '';
+  dTargetPestOther.style.display = t.details.targetPestKey === 'other' ? 'block' : 'none';
+  dTargetPestOther.value = t.details.targetPestOther || '';
   dRate.value = t.details.rateKey || 'wet';
   dTotalArea.value = t.details.totalAreaSqm || '';
   dPlotSize.value = t.details.plotSizeSqm || '';
@@ -1812,7 +2094,8 @@ const locationMapFrame = document.getElementById('location-map');
 function renderLocationStatus(t) {
   if (t.details.location && t.details.location.lat != null) {
     const lat = t.details.location.lat, lon = t.details.location.lon;
-    locationStatusEl.textContent = 'Set: ' + lat.toFixed(5) + ', ' + lon.toFixed(5);
+    const coordsText = lat.toFixed(5) + ', ' + lon.toFixed(5);
+    locationStatusEl.textContent = t.details.locationName ? t.details.locationName + ' (' + coordsText + ')' : 'Set: ' + coordsText;
     const d = 0.01;
     locationMapFrame.src = 'https://www.openstreetmap.org/export/embed.html?bbox=' + (lon-d) + ',' + (lat-d) + ',' + (lon+d) + ',' + (lat+d) + '&layer=mapnik&marker=' + lat + ',' + lon;
     locationMapWrap.style.display = 'block';
@@ -1821,14 +2104,29 @@ function renderLocationStatus(t) {
     locationMapWrap.style.display = 'none';
   }
 }
+async function reverseGeocodeLocation(t, lat, lon) {
+  try {
+    const res = await fetch('https://nominatim.openstreetmap.org/reverse?format=json&lat=' + lat + '&lon=' + lon + '&zoom=14&addressdetails=1');
+    const data = await res.json();
+    const addr = data.address || {};
+    const name = addr.village || addr.town || addr.city || addr.municipality || addr.suburb || addr.county || data.display_name;
+    if (name) {
+      t.details.locationName = name;
+      saveState();
+      renderLocationStatus(t);
+    }
+  } catch (e) { /* silent fail — coordinates alone still work fine */ }
+}
 document.getElementById('set-location-btn').addEventListener('click', function() {
   const t = currentTrial(); if (!t) return;
   if (!navigator.geolocation) { alert('GPS not available on this device/browser.'); return; }
   locationStatusEl.textContent = 'Getting location…';
   navigator.geolocation.getCurrentPosition(function(pos) {
     t.details.location = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+    t.details.locationName = '';
     saveState();
     renderLocationStatus(t);
+    reverseGeocodeLocation(t, pos.coords.latitude, pos.coords.longitude);
     if (appSettings.windyApiKey) {
       fetchWindyForecast(t.details.location.lat, t.details.location.lon).then(function() {
         renderApplication();
@@ -2041,32 +2339,62 @@ function setRepeatToInterval(days) {
   maRepeatCountField.style.display = 'block';
 }
 
-maProductSelect.addEventListener('change', function() {
-  const items = maProductSelect._items || [];
-  const idx = maProductSelect.value;
-  if (idx === '') return;
-  const it = items[parseInt(idx, 10)];
-  if (!it) return;
-  const t = currentTrial();
-  document.getElementById('ma-name').value = it.product.name;
-  const cropRate = t ? findCropRateForProduct(it.product, t.details.crop) : null;
+const maTargetField = document.getElementById('ma-target-field');
+const maTargetSelect = document.getElementById('ma-target-select');
+
+// Fills the Name/Notes/Repeat/Date fields from one specific product + target combo
+function applyTargetToAddItemForm(product, target, t) {
+  document.getElementById('ma-name').value = product.name;
   let notesParts = [];
-  if (it.product.formulation) notesParts.push(it.product.formulation);
-  if (it.product.activeIngredient) notesParts.push(it.product.activeIngredient);
-  if (cropRate && cropRate.target) notesParts.push(cropRate.target);
-  if (cropRate) {
-    if (cropRate.tank) notesParts.push(cropRate.tank);
-    if (cropRate.ha) notesParts.push(cropRate.ha);
-    if (cropRate.timing) notesParts.push(cropRate.timing);
+  if (product.formulation) notesParts.push(product.formulation);
+  if (product.activeIngredient) notesParts.push(product.activeIngredient);
+  if (target) {
+    const bits = [];
+    if (target.target) bits.push(target.target);
+    if (target.tank) bits.push(target.tank);
+    if (target.ha) bits.push(target.ha);
+    if (target.timing) bits.push(target.timing);
+    if (bits.length) notesParts.push(bits.join(' — '));
   } else if (t) {
     notesParts.push('no rate saved for ' + t.details.crop + ' yet');
   }
-  document.getElementById('ma-notes').value = notesParts.join(' — ');
-  if (cropRate && cropRate.intervalDays) {
-    setRepeatToInterval(cropRate.intervalDays);
+  document.getElementById('ma-notes').value = notesParts.join(' · ');
+
+  if (target && target.intervalDays) {
+    setRepeatToInterval(target.intervalDays);
   } else {
     maRepeat.value = '0';
     maRepeatCountField.style.display = 'none';
+  }
+  if (target && target.startDat !== null && target.startDat !== undefined && t && t.details.planting) {
+    document.getElementById('ma-date').value = addDaysToDateStr(t.details.planting, target.startDat);
+  }
+}
+
+maProductSelect.addEventListener('change', function() {
+  const items = maProductSelect._items || [];
+  const idx = maProductSelect.value;
+  if (idx === '') { maTargetField.style.display = 'none'; return; }
+  const it = items[parseInt(idx, 10)];
+  if (!it) return;
+  const t = currentTrial();
+  const cropRate = t ? findCropRateForProduct(it.product, t.details.crop) : null;
+  const targets = cropRate && cropRate.targets ? cropRate.targets : [];
+
+  if (targets.length > 1) {
+    // Multiple targets for this crop — let the user choose which one, rather than guessing
+    maTargetField.style.display = 'block';
+    maTargetSelect.innerHTML = targets.map(function(tg, i) {
+      return '<option value="' + i + '">' + (tg.target || 'Target ' + (i + 1)) + (tg.startDat !== null && tg.startDat !== undefined ? ' — ' + tg.startDat + ' DAT' : '') + '</option>';
+    }).join('');
+    maTargetSelect.value = '0';
+    applyTargetToAddItemForm(it.product, targets[0], t);
+    maTargetSelect.onchange = function() {
+      applyTargetToAddItemForm(it.product, targets[parseInt(maTargetSelect.value, 10)], t);
+    };
+  } else {
+    maTargetField.style.display = 'none';
+    applyTargetToAddItemForm(it.product, targets[0] || null, t);
   }
 });
 
@@ -2088,6 +2416,7 @@ function openMaintAddModal() {
   maType.value = 'pest';
   populateMaProductSelect();
   maProductSelect.value = '';
+  maTargetField.style.display = 'none';
 }
 
 function closeMaintAddModal() {
@@ -2388,14 +2717,18 @@ document.getElementById('apply-preset-confirm-btn').addEventListener('click', fu
     let noteParts = [];
     if (product && product.formulation) noteParts.push(product.formulation);
     if (product && product.activeIngredient) noteParts.push(product.activeIngredient);
-    if (cropRate) {
-      if (cropRate.target) noteParts.push(cropRate.target);
-      if (cropRate.tank) noteParts.push(cropRate.tank);
-      if (cropRate.ha) noteParts.push(cropRate.ha);
+    if (cropRate && cropRate.targets && cropRate.targets.length) {
+      cropRate.targets.forEach(function(tg) {
+        const bits = [];
+        if (tg.target) bits.push(tg.target);
+        if (tg.tank) bits.push(tg.tank);
+        if (tg.ha) bits.push(tg.ha);
+        if (bits.length) noteParts.push(bits.join(' — '));
+      });
     } else {
       noteParts.push('no current rate found for ' + t.details.crop + ' — check Rate Reference');
     }
-    const notes = noteParts.join(' — ');
+    const notes = noteParts.join(' · ');
     const title = product ? product.name : (item.productName + ' (removed from Rate Reference)');
     const count = Math.max(1, item.repeatCount || 1);
     const interval = item.intervalDays || 0;
@@ -2489,6 +2822,7 @@ function renderMaintenance() {
           const matches = getMatchingProducts(ev.targetKeyword);
           const selectedProduct = ms.productUsed ? (rateLibrary.insecticide || []).find(function(p) { return p.id === ms.productUsed.id; }) : null;
           const cropRate = selectedProduct ? findCropRateForProduct(selectedProduct, t.details.crop) : null;
+          const matchedTarget = cropRate ? findMatchingTarget(cropRate, ev.targetKeyword) : null;
 
           let optionsHtml = '<option value="">— Choose product used —</option>';
           matches.forEach(function(p) {
@@ -2501,10 +2835,10 @@ function renderMaintenance() {
             if (selectedProduct) {
               let rateNote = selectedProduct.name;
               if (selectedProduct.activeIngredient) rateNote += ' (' + selectedProduct.activeIngredient + ')';
-              if (cropRate) {
-                rateNote += ' — ';
-                if (cropRate.tank) rateNote += cropRate.tank;
-                if (cropRate.ha) rateNote += (cropRate.tank ? ' · ' : '') + cropRate.ha;
+              if (matchedTarget) {
+                rateNote += ' — ' + (matchedTarget.target ? matchedTarget.target + ': ' : '');
+                if (matchedTarget.tank) rateNote += matchedTarget.tank;
+                if (matchedTarget.ha) rateNote += (matchedTarget.tank ? ' · ' : '') + matchedTarget.ha;
               } else {
                 rateNote += ' — no rate saved for ' + t.details.crop + ' yet';
               }
@@ -2550,6 +2884,7 @@ function renderMaintenance() {
           const matches = getMatchingProducts(c.targetKeyword, matchCat);
           const selectedProduct = c.productUsed ? (rateLibrary[matchCat] || []).find(function(p) { return p.id === c.productUsed.id; }) : null;
           const cropRate = selectedProduct ? findCropRateForProduct(selectedProduct, t.details.crop) : null;
+          const matchedTarget = cropRate ? findMatchingTarget(cropRate, c.targetKeyword) : null;
 
           let optionsHtml = '<option value="">— Choose product used —</option>';
           matches.forEach(function(p) {
@@ -2562,10 +2897,10 @@ function renderMaintenance() {
             if (selectedProduct) {
               let rateNote = selectedProduct.name;
               if (selectedProduct.activeIngredient) rateNote += ' (' + selectedProduct.activeIngredient + ')';
-              if (cropRate) {
-                rateNote += ' — ';
-                if (cropRate.tank) rateNote += cropRate.tank;
-                if (cropRate.ha) rateNote += (cropRate.tank ? ' · ' : '') + cropRate.ha;
+              if (matchedTarget) {
+                rateNote += ' — ' + (matchedTarget.target ? matchedTarget.target + ': ' : '');
+                if (matchedTarget.tank) rateNote += matchedTarget.tank;
+                if (matchedTarget.ha) rateNote += (matchedTarget.tank ? ' · ' : '') + matchedTarget.ha;
               } else {
                 rateNote += ' — no rate saved for ' + t.details.crop + ' yet';
               }
