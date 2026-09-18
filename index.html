@@ -697,7 +697,7 @@
 </div>
 
 <script>
-const APP_VERSION = '5.4';
+const APP_VERSION = '5.5';
 const STORAGE_KEY = 'trial-calendar-state-v3';
 
 // ---- Supabase cloud sync ----
@@ -1215,7 +1215,8 @@ async function fetchWindyForecast(lat, lon) {
     }
     const data = await res.json();
     const ts = data.ts || [];
-    const precip = data['precip-surface'] || data['precip'] || [];
+    const precipKey = Object.keys(data).find(function(k) { return k.toLowerCase().indexOf('precip') !== -1 && k.toLowerCase().indexOf('conv') === -1 && k.toLowerCase().indexOf('snow') === -1; });
+    const precip = precipKey ? data[precipKey] : [];
     if (ts.length && !precip.length) {
       console.warn('Windy response keys:', Object.keys(data));
       throw new Error('Windy returned no precipitation field — got: ' + Object.keys(data).filter(function(k){return k!=='ts';}).join(', '));
