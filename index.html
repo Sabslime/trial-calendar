@@ -697,7 +697,7 @@
 </div>
 
 <script>
-const APP_VERSION = '5.3';
+const APP_VERSION = '5.4';
 const STORAGE_KEY = 'trial-calendar-state-v3';
 
 // ---- Supabase cloud sync ----
@@ -1192,10 +1192,10 @@ let forecastLoading = false;
 let forecastError = null;
 
 function classifyPrecip(mm) {
-  if (mm <= 0) return 'No rain expected';
-  if (mm < 1) return 'Slight chance — ' + mm.toFixed(1) + 'mm';
-  if (mm < 5) return 'Likely light rain — ' + mm.toFixed(1) + 'mm';
-  return 'Rain likely — ' + mm.toFixed(1) + 'mm';
+  if (mm <= 0) return 'No rain expected (raw: ' + mm + ')';
+  if (mm < 1) return 'Slight chance — ' + mm.toFixed(2) + 'mm';
+  if (mm < 5) return 'Likely light rain — ' + mm.toFixed(2) + 'mm';
+  return 'Rain likely — ' + mm.toFixed(2) + 'mm';
 }
 
 async function fetchWindyForecast(lat, lon) {
@@ -1207,7 +1207,7 @@ async function fetchWindyForecast(lat, lon) {
     const res = await fetch('https://api.windy.com/api/point-forecast/v2', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ lat: lat, lon: lon, model: 'gfs', parameters: ['precip'], key: appSettings.windyApiKey })
+      body: JSON.stringify({ lat: lat, lon: lon, model: 'gfs', parameters: ['precip'], key: appSettings.windyApiKey, levels: ['surface'] })
     });
     if (!res.ok) {
       const errBody = await res.text().catch(function() { return ''; });
