@@ -47,6 +47,9 @@
   .section-label { font-weight:700; font-size:0.8em; color:#2e5e2e; text-transform:uppercase; letter-spacing:0.03em; margin:18px 0 8px; }
   .section-label:first-child { margin-top:0; }
   .checkbox-row { display:flex; align-items:center; gap:8px; }
+  .assess-day-chip { display:flex; align-items:center; gap:5px; background:#fff; border:1px solid #ccd; border-radius:20px; padding:6px 10px; font-size:0.82em; }
+  .assess-day-chip input { width:16px; height:16px; margin:0; }
+  .assess-day-chip .remove-chip { background:none; border:none; color:#a3441d; font-size:0.9em; cursor:pointer; padding:0 0 0 2px; line-height:1; }
   .checkbox-row input { width:19px; height:19px; }
 
   table { width:100%; border-collapse:collapse; background:#fff; border-radius:10px; overflow:hidden; box-shadow:0 1px 4px rgba(0,0,0,0.08); }
@@ -426,6 +429,16 @@
     <button class="add-btn" id="settings-save-btn">Save</button>
   </div>
 
+  <div class="card">
+    <div class="section-label">Location Names</div>
+    <div class="field">
+      <label for="settings-locationiq-key">LocationIQ API Key (optional)</label>
+      <input type="text" id="settings-locationiq-key" placeholder="Paste your locationiq.com key">
+      <div class="field-hint">Free key from locationiq.com (5,000 requests/day, no credit card). Used to show a place name next to GPS coordinates in Details. Without a key, this falls back to OpenStreetMap's free lookup automatically.</div>
+    </div>
+    <button class="add-btn" id="settings-save-locationiq-btn">Save</button>
+  </div>
+
   <div class="card" id="settings-account-card">
     <div class="section-label">Account & Sync</div>
     <div class="field-hint" id="settings-account-status">Not signed in — data stays on this device only.</div>
@@ -573,6 +586,30 @@
 
   <div class="panel" id="panel-application">
     <div class="card">
+      <div class="section-label" style="margin-top:0;">Application Settings</div>
+      <div class="field">
+        <label for="app-interval-select">Interval between applications (days)</label>
+        <select id="app-interval-select">
+          <option value="7">7 days</option>
+          <option value="10">10 days</option>
+          <option value="14">14 days</option>
+          <option value="__custom__">Custom</option>
+        </select>
+        <input type="number" id="app-interval-custom" min="1" placeholder="e.g. 21" style="display:none; margin-top:8px;">
+        <div class="field-hint">Used to auto-fill the date when you add the next application.</div>
+      </div>
+      <div class="field">
+        <label>Assessment Days (after each application)</label>
+        <div id="assessment-days-checklist" style="display:flex; flex-wrap:wrap; gap:8px; margin-top:6px;"></div>
+        <div style="display:flex; gap:8px; margin-top:10px;">
+          <input type="number" id="assessment-day-custom" min="1" placeholder="Add custom day" style="flex:1;">
+          <button class="add-btn secondary" id="add-assessment-day-btn" type="button" style="margin-top:0; width:auto; padding:9px 14px;">+ Add</button>
+        </div>
+        <div class="field-hint">Choose which day(s) after application to assess — e.g. 1, 3, 7, 10, 14 DAA/DAB/DAC.</div>
+      </div>
+    </div>
+
+    <div class="card">
       <div id="app-blocks"></div>
       <button class="add-btn" id="add-app-btn">+ Add Application</button>
     </div>
@@ -660,7 +697,7 @@
 </div>
 
 <script>
-const APP_VERSION = '4.5';
+const APP_VERSION = '4.9';
 const STORAGE_KEY = 'trial-calendar-state-v3';
 
 // ---- Supabase cloud sync ----
@@ -1029,14 +1066,21 @@ function makeTrial(cropKey, variety, trialType, targetPestKey, targetPestOther) 
       title: '', crop: meta.label, cropKey: cropKey, variety: variety || '', sowing: '', planting: todayStr(), trialType: trialType || '',
       plantingDistance: '', plantingDistancePlant: '', plantingDistanceRow: '', targetPestKey: targetPestKey || '', targetPestOther: targetPestOther || '', location: null, locationName: '', rateKey: 'wet', totalAreaSqm: '', plotSizeSqm: ''
     },
+    appIntervalDays: 7,
+    assessmentDays: [1, 3, 7],
     applications: [
-      { id:'a1', label:'A', date: todayStr(), doneApp:false, assess:{1:false,3:false,7:false} }
+      { id:'a1', label:'A', date: todayStr(), doneApp:false, assess: makeAssessObject([1, 3, 7]) }
     ],
     maintenanceState: {},
     customMaintenance: [],
     plan: [], // planner entries: [{ id, category, productId, productName, type, startDat, intervalDays, repeatCount }]
     archived: false
   };
+}
+function makeAssessObject(days) {
+  const obj = {};
+  days.forEach(function(d) { obj[d] = false; });
+  return obj;
 }
 
 let state = { trials: [], currentTrialId: null };
@@ -1068,7 +1112,10 @@ function migrateRateEntry(e) {
       }];
       delete cr.target; delete cr.tank; delete cr.ha; delete cr.timing; delete cr.intervalDays;
     }
-    cr.targets.forEach(function(tg) { if (tg.startDat === undefined) tg.startDat = null; });
+    cr.targets.forEach(function(tg) {
+      if (tg.startDat === undefined) tg.startDat = null;
+      if (tg.frequency === undefined) tg.frequency = null;
+    });
   });
   delete e.targetPest; // moved to per-target
   return e;
@@ -1119,12 +1166,18 @@ function savePresets() {
 
 // ---- Settings (isolated storage, survives trial-data structure changes) ----
 const SETTINGS_STORAGE_KEY = 'trial-calendar-settings-v1';
-let appSettings = { windyApiKey: '' };
+let appSettings = { windyApiKey: '', locationIqApiKey: '' };
 let isApplyingRemote = false; // true while pulling cloud data, to avoid immediately re-pushing it
 function loadSettings() {
   try {
     const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
-    if (raw) { const saved = JSON.parse(raw); if (saved) appSettings = saved; }
+    if (raw) {
+      const saved = JSON.parse(raw);
+      if (saved) {
+        appSettings = saved;
+        if (typeof appSettings.locationIqApiKey !== 'string') appSettings.locationIqApiKey = '';
+      }
+    }
   } catch (e) { }
 }
 function saveSettings() {
@@ -1154,12 +1207,19 @@ async function fetchWindyForecast(lat, lon) {
     const res = await fetch('https://api.windy.com/api/point-forecast/v2', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ lat: lat, lon: lon, model: 'gfs', parameters: ['precip'], key: appSettings.windyApiKey, levels: ['surface'] })
+      body: JSON.stringify({ lat: lat, lon: lon, model: 'gfs', parameters: ['past3hprecip'], key: appSettings.windyApiKey, levels: ['surface'] })
     });
-    if (!res.ok) throw new Error('Windy API error ' + res.status);
+    if (!res.ok) {
+      const errBody = await res.text().catch(function() { return ''; });
+      throw new Error('Windy API error ' + res.status + (errBody ? ': ' + errBody.slice(0, 150) : ''));
+    }
     const data = await res.json();
     const ts = data.ts || [];
-    const precip = data['precip-surface'] || [];
+    const precip = data['past3hprecip-surface'] || [];
+    if (ts.length && !precip.length) {
+      console.warn('Windy response keys:', Object.keys(data));
+      throw new Error('Windy returned no precipitation field — got: ' + Object.keys(data).filter(function(k){return k!=='ts';}).join(', '));
+    }
     for (let i = 0; i < ts.length; i++) {
       const utcMs = ts[i];
       const localMs = utcMs + 8 * 3600 * 1000; // Philippines UTC+8 fixed offset
@@ -1206,6 +1266,8 @@ function loadState() {
             if (c.productUsed === undefined) c.productUsed = null;
           });
           if (!t.plan) t.plan = [];
+          if (!t.appIntervalDays) t.appIntervalDays = 7;
+          if (!Array.isArray(t.assessmentDays)) t.assessmentDays = [1, 3, 7];
           if (typeof t.details.title !== 'string') t.details.title = '';
           if (typeof t.details.plantingDistance !== 'string') t.details.plantingDistance = '';
           if (t.details.location === undefined) t.details.location = null;
@@ -1373,6 +1435,7 @@ function showSettings() {
   appTitle.textContent = 'Settings';
   headerSub.textContent = 'Saved separately — not affected by app updates';
   document.getElementById('settings-windy-key').value = appSettings.windyApiKey || '';
+  document.getElementById('settings-locationiq-key').value = appSettings.locationIqApiKey || '';
   updateAccountUI();
 }
 
@@ -1411,6 +1474,11 @@ document.getElementById('go-archived-btn').addEventListener('click', showArchive
 document.getElementById('go-settings-btn').addEventListener('click', showSettings);
 document.getElementById('settings-save-btn').addEventListener('click', function() {
   appSettings.windyApiKey = document.getElementById('settings-windy-key').value.trim();
+  saveSettings();
+  alert('Saved.');
+});
+document.getElementById('settings-save-locationiq-btn').addEventListener('click', function() {
+  appSettings.locationIqApiKey = document.getElementById('settings-locationiq-key').value.trim();
   saveSettings();
   alert('Saved.');
 });
@@ -1784,7 +1852,7 @@ document.querySelectorAll('.rate-tab-btn').forEach(function(btn) {
   });
 });
 
-function addTargetRow(targetsContainer, targetVal, tankVal, haVal, timingVal, intervalVal, startDatVal) {
+function addTargetRow(targetsContainer, targetVal, tankVal, haVal, timingVal, intervalVal, startDatVal, frequencyVal) {
   const isFert = rfCategory.value === 'fertilizer';
   const targetLabel = isFert ? 'Purpose / Nutrient (optional)' : 'Target Pest / Disease / Weed';
   const targetPlaceholder = isFert ? 'e.g. N supplementation, Zinc correction' : 'e.g. Fly, BPH, Stemborer';
@@ -1796,7 +1864,8 @@ function addTargetRow(targetsContainer, targetVal, tankVal, haVal, timingVal, in
     '<div class="field"><label>Rate per ha (ml)</label><input type="text" class="rf-target-ha-input" placeholder="e.g. 500 ml/ha" value="' + (haVal || '') + '"></div>' +
     '<div class="field"><label>Recommended Start (DAT)</label><input type="number" class="rf-target-startdat-input" placeholder="e.g. 7" min="0" value="' + (startDatVal !== null && startDatVal !== undefined ? startDatVal : '') + '"><div class="field-hint">If set, picking this target in "+ Add Item" auto-calculates the date from your trial\'s Planting Date.</div></div>' +
     '<div class="field"><label>Application Timing (notes)</label><input type="text" class="rf-target-timing-input" placeholder="e.g. 7 DAT" value="' + (timingVal || '') + '"></div>' +
-    '<div class="field"><label>Reapplication Interval (days, optional)</label><input type="number" class="rf-target-interval-input" placeholder="e.g. 14" min="1" value="' + (intervalVal || '') + '"></div>';
+    '<div class="field"><label>Reapplication Interval (days, optional)</label><input type="number" class="rf-target-interval-input" placeholder="e.g. 14" min="1" value="' + (intervalVal || '') + '"></div>' +
+    '<div class="field"><label>Frequency of Reapplication (times, optional)</label><input type="number" class="rf-target-frequency-input" placeholder="e.g. 3" min="1" value="' + (frequencyVal || '') + '"><div class="field-hint">How many times total — auto-fills "Number of repeats" in "+ Add Item".</div></div>';
   row.querySelector('.remove-target-row-btn').addEventListener('click', function() { row.remove(); });
   targetsContainer.appendChild(row);
 }
@@ -1812,7 +1881,7 @@ function addCropRow(cropVal, targets) {
   const targetsContainer = block.querySelector('.rf-targets-container');
   const targetList = (targets && targets.length) ? targets : [{}];
   targetList.forEach(function(t) {
-    addTargetRow(targetsContainer, t.target, t.tank, t.ha, t.timing, t.intervalDays, t.startDat);
+    addTargetRow(targetsContainer, t.target, t.tank, t.ha, t.timing, t.intervalDays, t.startDat, t.frequency);
   });
   block.querySelector('.remove-crop-row-btn').addEventListener('click', function() { block.remove(); });
   block.querySelector('.rf-add-target-btn').addEventListener('click', function() { addTargetRow(targetsContainer); });
@@ -1864,7 +1933,9 @@ document.getElementById('rf-save-btn').addEventListener('click', function() {
       const intervalDays = intervalRaw ? parseInt(intervalRaw, 10) : null;
       const startDatRaw = row.querySelector('.rf-target-startdat-input').value.trim();
       const startDat = startDatRaw !== '' ? parseInt(startDatRaw, 10) : null;
-      if (target || tank || ha || timing || intervalDays || startDat !== null) targets.push({ target: target, tank: tank, ha: ha, timing: timing, intervalDays: intervalDays, startDat: startDat });
+      const frequencyRaw = row.querySelector('.rf-target-frequency-input').value.trim();
+      const frequency = frequencyRaw ? parseInt(frequencyRaw, 10) : null;
+      if (target || tank || ha || timing || intervalDays || startDat !== null || frequency !== null) targets.push({ target: target, tank: tank, ha: ha, timing: timing, intervalDays: intervalDays, startDat: startDat, frequency: frequency });
     });
     if (crop || targets.length) cropRates.push({ crop: crop, targets: targets });
   });
@@ -1918,6 +1989,7 @@ function renderRatesList() {
         if (t.ha) row += '<div class="rate-crop-row"><b>Per ha:</b> ' + t.ha + '</div>';
         if (t.timing) row += '<div class="rate-crop-row"><b>Timing:</b> ' + t.timing + '</div>';
         if (t.intervalDays) row += '<div class="rate-crop-row"><b>Reapply every:</b> ' + t.intervalDays + ' days</div>';
+        if (t.frequency) row += '<div class="rate-crop-row"><b>Frequency:</b> ' + t.frequency + ' time' + (t.frequency !== 1 ? 's' : '') + '</div>';
         targetRows += '<div class="rate-target-block">' + row + '</div>';
       });
       cropBlocks += '<div class="rate-crop-block"><div class="rate-crop-name">' + (cr.crop || 'Unspecified crop') + '</div>' + targetRows + '</div>';
@@ -2106,10 +2178,24 @@ function renderLocationStatus(t) {
 }
 async function reverseGeocodeLocation(t, lat, lon) {
   try {
-    const res = await fetch('https://nominatim.openstreetmap.org/reverse?format=json&lat=' + lat + '&lon=' + lon + '&zoom=14&addressdetails=1');
-    const data = await res.json();
-    const addr = data.address || {};
-    const name = addr.village || addr.town || addr.city || addr.municipality || addr.suburb || addr.county || data.display_name;
+    let name = null;
+    if (appSettings.locationIqApiKey) {
+      const url = 'https://us1.locationiq.com/v1/reverse?key=' + encodeURIComponent(appSettings.locationIqApiKey) + '&lat=' + lat + '&lon=' + lon + '&format=json';
+      const res = await fetch(url);
+      if (res.ok) {
+        const data = await res.json();
+        const addr = data.address || {};
+        name = addr.village || addr.town || addr.city || addr.municipality || addr.suburb || addr.county || data.display_name;
+      } else {
+        console.warn('LocationIQ lookup failed (' + res.status + '), falling back to OpenStreetMap');
+      }
+    }
+    if (!name) {
+      const res = await fetch('https://nominatim.openstreetmap.org/reverse?format=json&lat=' + lat + '&lon=' + lon + '&zoom=14&addressdetails=1');
+      const data = await res.json();
+      const addr = data.address || {};
+      name = addr.village || addr.town || addr.city || addr.municipality || addr.suburb || addr.county || data.display_name;
+    }
     if (name) {
       t.details.locationName = name;
       saveState();
@@ -2205,31 +2291,133 @@ function nextLabel(trial) {
 
 addAppBtn.addEventListener('click', function() {
   const t = currentTrial(); if (!t) return;
+  let nextDate = t.details.planting || todayStr();
+  if (t.applications.length) {
+    const lastApp = t.applications[t.applications.length - 1];
+    if (lastApp.date) nextDate = addDaysToDateStr(lastApp.date, t.appIntervalDays);
+  }
   t.applications.push({
     id: 'a' + Date.now(),
     label: nextLabel(t),
-    date: t.details.planting || todayStr(),
+    date: nextDate,
     doneApp: false,
-    assess: {1:false, 3:false, 7:false}
+    assess: makeAssessObject(t.assessmentDays)
   });
+  saveState();
+  renderApplication();
+});
+
+// ---- Application Settings: interval + assessment days ----
+const appIntervalSelect = document.getElementById('app-interval-select');
+const appIntervalCustom = document.getElementById('app-interval-custom');
+const assessmentDaysChecklist = document.getElementById('assessment-days-checklist');
+const assessmentDayCustomInput = document.getElementById('assessment-day-custom');
+
+function renderAppSettings(t) {
+  const fixedOptions = [7, 10, 14];
+  if (fixedOptions.indexOf(t.appIntervalDays) !== -1) {
+    appIntervalSelect.value = String(t.appIntervalDays);
+    appIntervalCustom.style.display = 'none';
+  } else {
+    appIntervalSelect.value = '__custom__';
+    appIntervalCustom.style.display = 'block';
+    appIntervalCustom.value = t.appIntervalDays;
+  }
+
+  const commonDays = [1, 3, 7, 10, 14];
+  const allDays = Array.from(new Set(commonDays.concat(t.assessmentDays))).sort(function(a,b){return a-b;});
+  assessmentDaysChecklist.innerHTML = allDays.map(function(d) {
+    const checked = t.assessmentDays.indexOf(d) !== -1;
+    const isCustomExtra = commonDays.indexOf(d) === -1;
+    return '<label class="assess-day-chip"><input type="checkbox" class="assess-day-checkbox" data-day="' + d + '" ' + (checked ? 'checked' : '') + '> ' + d + ' DA' + (isCustomExtra ? '<button type="button" class="remove-chip" data-day="' + d + '">✕</button>' : '') + '</label>';
+  }).join('');
+
+  assessmentDaysChecklist.querySelectorAll('.assess-day-checkbox').forEach(function(cb) {
+    cb.addEventListener('change', function() {
+      const day = parseInt(cb.dataset.day, 10);
+      if (cb.checked) {
+        if (t.assessmentDays.indexOf(day) === -1) t.assessmentDays.push(day);
+      } else {
+        t.assessmentDays = t.assessmentDays.filter(function(d) { return d !== day; });
+      }
+      if (!t.assessmentDays.length) { t.assessmentDays = [7]; alert('At least one assessment day is required — reset to 7.'); }
+      saveState();
+      renderApplication();
+    });
+  });
+  assessmentDaysChecklist.querySelectorAll('.remove-chip').forEach(function(btn) {
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      const day = parseInt(btn.dataset.day, 10);
+      t.assessmentDays = t.assessmentDays.filter(function(d) { return d !== day; });
+      if (!t.assessmentDays.length) t.assessmentDays = [7];
+      saveState();
+      renderApplication();
+    });
+  });
+}
+
+function recomputeApplicationChain(t) {
+  for (let i = 1; i < t.applications.length; i++) {
+    t.applications[i].date = addDaysToDateStr(t.applications[i - 1].date, t.appIntervalDays);
+  }
+}
+
+appIntervalSelect.addEventListener('change', function() {
+  const t = currentTrial(); if (!t) return;
+  if (appIntervalSelect.value === '__custom__') {
+    appIntervalCustom.style.display = 'block';
+    appIntervalCustom.focus();
+  } else {
+    appIntervalCustom.style.display = 'none';
+    t.appIntervalDays = parseInt(appIntervalSelect.value, 10);
+    recomputeApplicationChain(t);
+    saveState();
+    renderApplication();
+  }
+});
+appIntervalCustom.addEventListener('change', function() {
+  const t = currentTrial(); if (!t) return;
+  const val = parseInt(appIntervalCustom.value, 10);
+  if (val > 0) {
+    t.appIntervalDays = val;
+    recomputeApplicationChain(t);
+    saveState();
+    renderApplication();
+  }
+});
+document.getElementById('add-assessment-day-btn').addEventListener('click', function() {
+  const t = currentTrial(); if (!t) return;
+  const val = parseInt(assessmentDayCustomInput.value, 10);
+  if (!val || val < 1) { alert('Enter a valid day number.'); return; }
+  if (t.assessmentDays.indexOf(val) === -1) t.assessmentDays.push(val);
+  assessmentDayCustomInput.value = '';
   saveState();
   renderApplication();
 });
 
 function renderApplication() {
   const t = currentTrial(); if (!t) return;
+  renderAppSettings(t);
   appBlocksEl.innerHTML = '';
+  const daysLabel = t.assessmentDays.slice().sort(function(a,b){return a-b;}).join(', ');
   t.applications.forEach(function(app) {
     const div = document.createElement('div');
     div.className = 'app-block';
-    div.innerHTML = '<h3>Application ' + app.label + '</h3><div class="app-row"><div class="field"><label>Date of Application ' + app.label + '</label><input type="date" data-id="' + app.id + '" class="app-date" value="' + app.date + '"></div>' + (t.applications.length > 1 ? '<button class="remove-btn" data-id="' + app.id + '">Remove</button>' : '') + '</div><div class="assess-note">Assessments auto-scheduled at 1, 3 & 7 DA' + app.label + ' — tracked in the table below.</div>';
+    div.innerHTML = '<h3>Application ' + app.label + '</h3><div class="app-row"><div class="field"><label>Date of Application ' + app.label + '</label><input type="date" data-id="' + app.id + '" class="app-date" value="' + app.date + '"></div>' + (t.applications.length > 1 ? '<button class="remove-btn" data-id="' + app.id + '">Remove</button>' : '') + '</div><div class="assess-note">Assessments auto-scheduled at ' + daysLabel + ' DA' + app.label + ' — tracked in the table below.</div>';
     appBlocksEl.appendChild(div);
   });
 
   appBlocksEl.querySelectorAll('.app-date').forEach(function(inp) {
     inp.addEventListener('change', function(e) {
-      const app = t.applications.find(function(a) { return a.id === e.target.dataset.id; });
-      if (app) app.date = e.target.value;
+      const idx = t.applications.findIndex(function(a) { return a.id === e.target.dataset.id; });
+      if (idx === -1) return;
+      t.applications[idx].date = e.target.value;
+      // Cascade: recompute every later application's date as previous + interval,
+      // so the chain stays consistent instead of going stale.
+      for (let i = idx + 1; i < t.applications.length; i++) {
+        t.applications[i].date = addDaysToDateStr(t.applications[i - 1].date, t.appIntervalDays);
+      }
       saveState();
       renderApplication();
     });
@@ -2254,7 +2442,7 @@ function renderApplication() {
       checked: app.doneApp,
       onToggle: function(val) { app.doneApp = val; }
     });
-    [1,3,7].forEach(function(n) {
+    t.assessmentDays.slice().sort(function(a,b){return a-b;}).forEach(function(n) {
       const d = new Date(app.date + 'T00:00:00');
       d.setDate(d.getDate() + n);
       rows.push({
@@ -2362,6 +2550,9 @@ function applyTargetToAddItemForm(product, target, t) {
 
   if (target && target.intervalDays) {
     setRepeatToInterval(target.intervalDays);
+    if (target.frequency) {
+      document.getElementById('ma-repeat-count').value = target.frequency;
+    }
   } else {
     maRepeat.value = '0';
     maRepeatCountField.style.display = 'none';
@@ -2981,7 +3172,7 @@ function collectTrialEvents(t) {
     if (!app.date) return;
     const base = new Date(app.date + 'T00:00:00');
     events.push({ dateObj: base, title: 'Application ' + app.label, note: 'Date of application', type: 'pest', checked: app.doneApp });
-    [1,3,7].forEach(function(n) {
+    (t.assessmentDays || [1,3,7]).forEach(function(n) {
       const d = new Date(app.date + 'T00:00:00'); d.setDate(d.getDate() + n);
       events.push({ dateObj: d, title: 'Assessment — ' + n + ' DA' + app.label, note: n + ' day(s) after Application ' + app.label, type: 'assess', checked: !!app.assess[n] });
     });
