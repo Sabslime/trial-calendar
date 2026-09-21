@@ -158,6 +158,11 @@
   .reminder-trial-group { background:#fff; border-radius:10px; padding:10px 12px; box-shadow:0 1px 4px rgba(0,0,0,0.08); margin-bottom:8px; }
   .reminder-trial-name { font-weight:700; font-size:0.85em; color:#1f2a1f; margin-bottom:4px; }
   .reminder-item { display:flex; align-items:center; gap:6px; font-size:0.8em; color:#445; padding:3px 0; }
+  .ext-reminder-row { display:flex; align-items:flex-start; gap:10px; background:#fff; border-radius:10px; padding:12px 14px; box-shadow:0 1px 4px rgba(0,0,0,0.08); margin-bottom:8px; }
+  .ext-reminder-row input[type=checkbox] { width:20px; height:20px; margin-top:1px; flex-shrink:0; }
+  .ext-reminder-text { flex:1; font-size:0.9em; color:#1f2a1f; line-height:1.4; }
+  .ext-reminder-row.done .ext-reminder-text { text-decoration:line-through; opacity:0.5; }
+  .ext-reminder-remove { background:none; border:none; color:#a3441d; font-size:0.9em; cursor:pointer; padding:0 2px; flex-shrink:0; }
   .reminder-item .tag { margin-left:0; }
   .reminder-item.reminder-done { opacity:0.5; text-decoration:line-through; }
   .reminders-empty { text-align:center; color:#889; font-size:0.85em; padding:10px 0 18px; }
@@ -197,6 +202,7 @@
   .dot-fert { background:#4a8f4a; }
   .dot-pest { background:#c0562e; }
   .dot-assess { background:#3a6ea5; }
+  .dot-reminder { background:#8a5a10; }
   .day-events { background:#fff; border-radius:10px; padding:4px; box-shadow:0 1px 4px rgba(0,0,0,0.08); }
   .day-events .none { text-align:center; color:#aab; font-size:0.85em; padding:16px; }
 
@@ -254,6 +260,7 @@
   <div class="home-nav-row">
     <div class="home-nav-btn" id="go-rates-btn">Rate Reference</div>
     <div class="home-nav-btn" id="go-presets-btn">Presets</div>
+    <div class="home-nav-btn" id="go-reminders-btn">Reminders</div>
     <div class="home-nav-btn" id="go-archived-btn">Archived</div>
     <div class="home-nav-btn" id="go-settings-btn">Settings</div>
   </div>
@@ -412,6 +419,22 @@
 
     <button class="add-btn" id="pf-save-btn" style="margin-top:22px;">Save Preset</button>
   </div>
+</div>
+
+<div id="view-reminders" class="home-wrap" style="display:none;">
+  <div class="card">
+    <div class="field">
+      <label for="reminder-new-input">Reminder</label>
+      <input type="text" id="reminder-new-input" placeholder="e.g. Buy more Marshal">
+    </div>
+    <div class="field">
+      <label for="reminder-new-date">Date (optional)</label>
+      <input type="date" id="reminder-new-date">
+      <div class="field-hint">If set, this shows up on the Home calendar too.</div>
+    </div>
+    <button class="add-btn" id="reminder-add-btn">Add</button>
+  </div>
+  <div id="reminders-external-list"></div>
 </div>
 
 <div id="view-archived" class="home-wrap" style="display:none;">
@@ -697,7 +720,7 @@
 </div>
 
 <script>
-const APP_VERSION = '5.5';
+const APP_VERSION = '5.7';
 const STORAGE_KEY = 'trial-calendar-state-v3';
 
 // ---- Supabase cloud sync ----
@@ -746,7 +769,8 @@ function collectAllLocalData() {
     trialState: state,
     rateLibrary: rateLibrary,
     settings: appSettings,
-    presets: presets
+    presets: presets,
+    extReminders: extReminders
   };
 }
 function applyAllLocalData(data) {
@@ -766,6 +790,10 @@ function applyAllLocalData(data) {
   if (Array.isArray(data.presets)) {
     presets = data.presets;
     savePresets();
+  }
+  if (Array.isArray(data.extReminders)) {
+    extReminders = data.extReminders;
+    saveExtReminders();
   }
   isApplyingRemote = false;
 }
@@ -1164,6 +1192,27 @@ function savePresets() {
   if (!isApplyingRemote) queueCloudSync();
 }
 
+// ---- External Reminders (standalone, not tied to any trial) ----
+const EXT_REMINDERS_STORAGE_KEY = 'trial-calendar-ext-reminders-v1';
+let extReminders = []; // [{ id, text, done }]
+function loadExtReminders() {
+  try {
+    const raw = localStorage.getItem(EXT_REMINDERS_STORAGE_KEY);
+    if (raw) {
+      const saved = JSON.parse(raw);
+      if (Array.isArray(saved)) {
+        extReminders = saved;
+        extReminders.forEach(function(r) { if (r.date === undefined) r.date = null; });
+      }
+    }
+  } catch (e) { }
+}
+function saveExtReminders() {
+  try { localStorage.setItem(EXT_REMINDERS_STORAGE_KEY, JSON.stringify(extReminders)); }
+  catch (e) { console.error('Reminders save failed', e); }
+  if (!isApplyingRemote) queueCloudSync();
+}
+
 // ---- Settings (isolated storage, survives trial-data structure changes) ----
 const SETTINGS_STORAGE_KEY = 'trial-calendar-settings-v1';
 let appSettings = { windyApiKey: '', locationIqApiKey: '' };
@@ -1339,6 +1388,7 @@ const viewHome = document.getElementById('view-home');
 const viewNew = document.getElementById('view-new');
 const viewRates = document.getElementById('view-rates');
 const viewPresets = document.getElementById('view-presets');
+const viewReminders = document.getElementById('view-reminders');
 const viewArchived = document.getElementById('view-archived');
 const viewTrial = document.getElementById('view-trial');
 const viewSettings = document.getElementById('view-settings');
@@ -1354,6 +1404,7 @@ function hideAllViews() {
   viewNew.style.display = 'none';
   viewRates.style.display = 'none';
   viewPresets.style.display = 'none';
+  viewReminders.style.display = 'none';
   viewArchived.style.display = 'none';
   viewSettings.style.display = 'none';
   viewAuth.style.display = 'none';
@@ -1420,6 +1471,16 @@ function showPresets() {
   renderPresetsList();
 }
 
+function showReminders() {
+  hideAllViews();
+  viewReminders.style.display = 'block';
+  backBtn.style.display = 'inline-block';
+  appTitle.textContent = '📝 Reminders';
+  headerSub.textContent = 'General notes — not tied to any trial';
+  document.getElementById('reminder-new-input').value = '';
+  renderExtReminders();
+}
+
 function showArchived() {
   hideAllViews();
   viewArchived.style.display = 'block';
@@ -1471,6 +1532,56 @@ backBtn.addEventListener('click', showHome);
 document.getElementById('new-trial-btn').addEventListener('click', showNewTrial);
 document.getElementById('go-rates-btn').addEventListener('click', showRates);
 document.getElementById('go-presets-btn').addEventListener('click', showPresets);
+document.getElementById('go-reminders-btn').addEventListener('click', showReminders);
+
+function renderExtReminders() {
+  const list = document.getElementById('reminders-external-list');
+  list.innerHTML = '';
+  if (!extReminders.length) {
+    list.innerHTML = '<div class="empty-state">No reminders yet. Add one above — e.g. "Buy more Marshal" or "Call supplier."</div>';
+    return;
+  }
+  const sorted = extReminders.slice().sort(function(a, b) {
+    if (a.done !== b.done) return a.done ? 1 : -1;
+    return 0;
+  });
+  sorted.forEach(function(r) {
+    const row = document.createElement('div');
+    row.className = 'ext-reminder-row' + (r.done ? ' done' : '');
+    const dateHtml = r.date ? '<div class="rate-crop-row" style="margin-top:2px;"><b>Date:</b> ' + fmtMMDDYYYY(r.date) + '</div>' : '';
+    row.innerHTML = '<input type="checkbox" class="ext-reminder-checkbox" ' + (r.done ? 'checked' : '') + '><div class="ext-reminder-text">' + r.text + dateHtml + '</div><button class="ext-reminder-remove" title="Remove">✕</button>';
+    row.querySelector('.ext-reminder-checkbox').addEventListener('change', function(e) {
+      r.done = e.target.checked;
+      saveExtReminders();
+      renderExtReminders();
+    });
+    row.querySelector('.ext-reminder-remove').addEventListener('click', function() {
+      extReminders = extReminders.filter(function(x) { return x.id !== r.id; });
+      saveExtReminders();
+      renderExtReminders();
+    });
+    list.appendChild(row);
+  });
+}
+
+function addExtReminder() {
+  const input = document.getElementById('reminder-new-input');
+  const dateInput = document.getElementById('reminder-new-date');
+  const text = input.value.trim();
+  if (!text) return;
+  extReminders.push({ id: 'rem' + Date.now(), text: text, done: false, date: dateInput.value || null });
+  saveExtReminders();
+  input.value = '';
+  dateInput.value = '';
+  input.focus();
+  renderExtReminders();
+  if (homeCalOpen) renderHomeCalendar();
+}
+document.getElementById('reminder-add-btn').addEventListener('click', addExtReminder);
+document.getElementById('reminder-new-input').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') addExtReminder();
+});
+
 document.getElementById('go-archived-btn').addEventListener('click', showArchived);
 document.getElementById('go-settings-btn').addEventListener('click', showSettings);
 document.getElementById('settings-save-btn').addEventListener('click', function() {
@@ -1683,6 +1794,18 @@ function collectAllActiveTrialEvents() {
       events.push(Object.assign({}, e, { trialId: t.id, trialName: displayTitle(t), trialEmoji: meta.emoji }));
     });
   });
+  extReminders.filter(function(r) { return r.date; }).forEach(function(r) {
+    events.push({
+      dateObj: new Date(r.date + 'T00:00:00'),
+      title: r.text,
+      note: 'Standalone reminder',
+      type: 'reminder',
+      checked: r.done,
+      trialId: null,
+      trialName: 'Reminder',
+      trialEmoji: '📝'
+    });
+  });
   return events;
 }
 
@@ -1741,17 +1864,21 @@ function renderHomeCalDaySummary(events, dateObj) {
   }
   container.innerHTML = '<div class="field-hint" style="margin-bottom:8px;">' + fmt(dateObj) + ' — tap an item for full details</div>';
   dayEvents.forEach(function(e, idx) {
-    const tagClass = e.type === 'fert' ? 'tag-fert' : (e.type === 'assess' ? 'tag-assess' : 'tag-pest');
-    const tagLabel = e.type === 'fert' ? 'FERTILIZER' : (e.type === 'assess' ? 'ASSESSMENT' : 'PEST');
+    const tagClass = e.type === 'fert' ? 'tag-fert' : (e.type === 'assess' ? 'tag-assess' : (e.type === 'reminder' ? 'tag-added' : 'tag-pest'));
+    const tagLabel = e.type === 'fert' ? 'FERTILIZER' : (e.type === 'assess' ? 'ASSESSMENT' : (e.type === 'reminder' ? 'REMINDER' : 'PEST'));
     const row = document.createElement('div');
     row.className = 'home-cal-summary-row';
-    row.innerHTML = '<div class="home-cal-summary-head"><div><div class="home-cal-summary-title">' + (e.checked ? '✓ ' : '') + e.title + '<span class="tag ' + tagClass + '">' + tagLabel + '</span></div><div class="home-cal-summary-trial">' + e.trialEmoji + ' ' + e.trialName + '</div></div><div class="home-cal-arrow">▾</div></div><div class="home-cal-detail">' + e.note + '<div style="margin-top:8px;"><button class="add-btn secondary" style="margin-top:0; padding:8px;" data-trial-id="' + e.trialId + '">Open ' + e.trialName + '</button></div></div>';
+    const actionBtnHtml = e.trialId
+      ? '<button class="add-btn secondary" style="margin-top:0; padding:8px;">Open ' + e.trialName + '</button>'
+      : '<button class="add-btn secondary" style="margin-top:0; padding:8px;">Open Reminders</button>';
+    row.innerHTML = '<div class="home-cal-summary-head"><div><div class="home-cal-summary-title">' + (e.checked ? '✓ ' : '') + e.title + '<span class="tag ' + tagClass + '">' + tagLabel + '</span></div><div class="home-cal-summary-trial">' + e.trialEmoji + ' ' + e.trialName + '</div></div><div class="home-cal-arrow">▾</div></div><div class="home-cal-detail">' + e.note + '<div style="margin-top:8px;">' + actionBtnHtml + '</div></div>';
     row.addEventListener('click', function(ev) {
       if (ev.target.tagName === 'BUTTON') return;
       row.classList.toggle('expanded');
     });
     row.querySelector('button').addEventListener('click', function() {
-      showTrial(e.trialId);
+      if (e.trialId) showTrial(e.trialId);
+      else showReminders();
     });
     container.appendChild(row);
   });
@@ -3248,6 +3375,7 @@ loadState();
 loadSettings();
 loadRateLibrary();
 loadPresets();
+loadExtReminders();
 showHome();
 initAuth();
 
