@@ -745,7 +745,7 @@
 </div>
 
 <script>
-const APP_VERSION = '5.9';
+const APP_VERSION = '6.1';
 const STORAGE_KEY = 'trial-calendar-state-v3';
 
 // ---- Supabase cloud sync ----
@@ -2015,15 +2015,29 @@ function addTargetRow(targetsContainer, targetVal, tankVal, haVal, timingVal, in
   const targetPlaceholder = isFert ? 'e.g. N supplementation, Zinc correction' : 'e.g. Fly, BPH, Stemborer';
   const row = document.createElement('div');
   row.className = 'rf-target-row';
+  const fixedIntervals = [7, 10, 14];
+  const isCustomInterval = intervalVal && fixedIntervals.indexOf(intervalVal) === -1;
   row.innerHTML = '<button type="button" class="remove-target-row-btn">Remove this target</button>' +
     '<div class="field"><label>' + targetLabel + '</label><input type="text" class="rf-target-name-input" placeholder="' + targetPlaceholder + '" value="' + (targetVal || '') + '"></div>' +
     '<div class="field"><label>Rate per Tank (ml)</label><input type="text" class="rf-target-tank-input" placeholder="e.g. 20 ml / 16L" value="' + (tankVal || '') + '"></div>' +
     '<div class="field"><label>Rate per ha (ml)</label><input type="text" class="rf-target-ha-input" placeholder="e.g. 500 ml/ha" value="' + (haVal || '') + '"></div>' +
     '<div class="field"><label>Recommended Start (DAT)</label><input type="number" class="rf-target-startdat-input" placeholder="e.g. 7" min="0" value="' + (startDatVal !== null && startDatVal !== undefined ? startDatVal : '') + '"><div class="field-hint">If set, picking this target in "+ Add Item" auto-calculates the date from your trial\'s Planting Date.</div></div>' +
     '<div class="field"><label>Application Timing (notes)</label><input type="text" class="rf-target-timing-input" placeholder="e.g. 7 DAT" value="' + (timingVal || '') + '"></div>' +
-    '<div class="field"><label>Reapplication Interval (days, optional)</label><input type="number" class="rf-target-interval-input" placeholder="e.g. 14" min="1" value="' + (intervalVal || '') + '"></div>' +
+    '<div class="field"><label>Reapplication Interval (optional)</label><select class="rf-target-interval-select">' +
+      '<option value="">No repeat</option>' +
+      '<option value="7"' + (intervalVal === 7 ? ' selected' : '') + '>Every 7 days</option>' +
+      '<option value="10"' + (intervalVal === 10 ? ' selected' : '') + '>Every 10 days</option>' +
+      '<option value="14"' + (intervalVal === 14 ? ' selected' : '') + '>Every 14 days</option>' +
+      '<option value="__custom__"' + (isCustomInterval ? ' selected' : '') + '>Custom</option>' +
+    '</select><input type="number" class="rf-target-interval-custom" min="1" placeholder="e.g. 21" style="display:' + (isCustomInterval ? 'block' : 'none') + '; margin-top:8px;" value="' + (isCustomInterval ? intervalVal : '') + '"></div>' +
     '<div class="field"><label>Frequency of Reapplication (times, optional)</label><input type="number" class="rf-target-frequency-input" placeholder="e.g. 3" min="1" value="' + (frequencyVal || '') + '"><div class="field-hint">How many times total — auto-fills "Number of repeats" in "+ Add Item".</div></div>';
   row.querySelector('.remove-target-row-btn').addEventListener('click', function() { row.remove(); });
+  const intervalSelect = row.querySelector('.rf-target-interval-select');
+  const intervalCustom = row.querySelector('.rf-target-interval-custom');
+  intervalSelect.addEventListener('change', function() {
+    intervalCustom.style.display = intervalSelect.value === '__custom__' ? 'block' : 'none';
+    if (intervalSelect.value === '__custom__') intervalCustom.focus();
+  });
   targetsContainer.appendChild(row);
 }
 
@@ -2096,8 +2110,14 @@ document.getElementById('rf-save-btn').addEventListener('click', function() {
       const tank = row.querySelector('.rf-target-tank-input').value.trim();
       const ha = row.querySelector('.rf-target-ha-input').value.trim();
       const timing = row.querySelector('.rf-target-timing-input').value.trim();
-      const intervalRaw = row.querySelector('.rf-target-interval-input').value.trim();
-      const intervalDays = intervalRaw ? parseInt(intervalRaw, 10) : null;
+      const intervalSelectVal = row.querySelector('.rf-target-interval-select').value;
+      let intervalDays = null;
+      if (intervalSelectVal === '__custom__') {
+        const customRaw = row.querySelector('.rf-target-interval-custom').value.trim();
+        intervalDays = customRaw ? parseInt(customRaw, 10) : null;
+      } else if (intervalSelectVal) {
+        intervalDays = parseInt(intervalSelectVal, 10);
+      }
       const startDatRaw = row.querySelector('.rf-target-startdat-input').value.trim();
       const startDat = startDatRaw !== '' ? parseInt(startDatRaw, 10) : null;
       const frequencyRaw = row.querySelector('.rf-target-frequency-input').value.trim();
@@ -3145,12 +3165,18 @@ function categoryToType(category) { return category === 'fertilizer' ? 'fert' : 
 // 3) "<num> <unit>/hill" — needs multiplying by this trial's Number of Hills
 function extractRateNumbers(text) {
   if (!text) return null;
-  let m = text.match(/([\d.]+)\s*(kg|g|ml|l)\s+total area/i);
-  if (m) return { amount: parseFloat(m[1]), unit: m[2].toLowerCase(), mode: 'totalArea' };
-  m = text.match(/([\d.]+)\s*(kg|g|ml|l)\s*\/\s*ha\b/i);
-  if (m) return { amount: parseFloat(m[1]), unit: m[2].toLowerCase(), mode: 'perHa' };
-  m = text.match(/([\d.]+)\s*(kg|g|ml|l)\s*\/\s*hill\b/i);
-  if (m) return { amount: parseFloat(m[1]), unit: m[2].toLowerCase(), mode: 'perHill' };
+  const unitPattern = '(kg|g|ml|li?ters?|l)\\b';
+  function normalizeUnit(u) {
+    u = u.toLowerCase();
+    if (u === 'l' || u === 'li' || u === 'liter' || u === 'liters') return 'l';
+    return u;
+  }
+  let m = text.match(new RegExp('([\\d.]+)\\s*' + unitPattern + '\\s+total area', 'i'));
+  if (m) return { amount: parseFloat(m[1]), unit: normalizeUnit(m[2]), mode: 'totalArea' };
+  m = text.match(new RegExp('([\\d.]+)\\s*' + unitPattern + '\\s*\\/\\s*ha\\b', 'i'));
+  if (m) return { amount: parseFloat(m[1]), unit: normalizeUnit(m[2]), mode: 'perHa' };
+  m = text.match(new RegExp('([\\d.]+)\\s*' + unitPattern + '\\s*\\/\\s*hill\\b', 'i'));
+  if (m) return { amount: parseFloat(m[1]), unit: normalizeUnit(m[2]), mode: 'perHill' };
   return null;
 }
 
@@ -3208,20 +3234,38 @@ function renderSupplies() {
     if (g.unresolved && !Object.keys(g.amounts).length) {
       return '<div class="usage-card"><div class="usage-card-name">' + title + '</div><div class="usage-card-warn">⚠ ' + g.unresolvedReason + '</div></div>';
     }
-    const totalsText = Object.keys(g.amounts).map(function(unit) {
-      return round(g.amounts[unit], 2) + ' ' + unit;
+
+    // Normalize g → kg and ml → L for cleaner, consistent totals
+    const amounts = Object.assign({}, g.amounts);
+    if (amounts.g !== undefined) {
+      amounts.kg = round((amounts.kg || 0) + (amounts.g / 1000), 3);
+      delete amounts.g;
+    }
+    if (amounts.ml !== undefined) {
+      amounts.l = round((amounts.l || 0) + (amounts.ml / 1000), 3);
+      delete amounts.ml;
+    }
+
+    const totalsText = Object.keys(amounts).map(function(unit) {
+      return round(amounts[unit], 2) + ' ' + unit;
     }).join(' + ');
 
-    // Try to convert into purchasable packages, if this product has a Package Size saved
+    // Try a product-specific package size first; otherwise default to 50 kg/sack for any weight-based product
     let packageHtml = '';
     const product = findProductByName(title);
     if (product && product.packageSize && product.packageUnit) {
-      const matchingAmount = g.amounts[product.packageUnit.toLowerCase()];
+      const rawUnit = product.packageUnit.toLowerCase();
+      const normalizedUnit = rawUnit === 'g' ? 'kg' : (rawUnit === 'ml' ? 'l' : rawUnit);
+      const packageSizeNormalized = (rawUnit === 'g' || rawUnit === 'ml') ? product.packageSize / 1000 : product.packageSize;
+      const matchingAmount = amounts[normalizedUnit];
       if (matchingAmount !== undefined) {
-        const packagesNeeded = Math.ceil(matchingAmount / product.packageSize);
+        const packagesNeeded = Math.ceil(matchingAmount / packageSizeNormalized);
         const label = product.packageLabel || 'package';
         packageHtml = '<div class="usage-card-total" style="color:#8a5a10;">🛒 Buy: ' + packagesNeeded + ' ' + label + (packagesNeeded !== 1 ? 's' : '') + ' (' + product.packageSize + ' ' + product.packageUnit + '/' + label + ')</div>';
       }
+    } else if (amounts.kg !== undefined) {
+      const sacksNeeded = Math.ceil(amounts.kg / 50);
+      packageHtml = '<div class="usage-card-total" style="color:#8a5a10;">🛒 Buy: ~' + sacksNeeded + ' sack' + (sacksNeeded !== 1 ? 's' : '') + ' (default: 50 kg/sack — set a Package Size in Rate Reference for an exact size)</div>';
     }
 
     return '<div class="usage-card"><div class="usage-card-name">' + title + '</div><div class="usage-card-total">Total needed: ' + totalsText + '</div>' + packageHtml + (g.unresolved ? '<div class="usage-card-warn">⚠ Some occurrences of this item weren\'t counted — ' + g.unresolvedReason + '</div>' : '') + '</div>';
