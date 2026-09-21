@@ -79,6 +79,10 @@
   .plan-entry { background:#fff; border-radius:10px; padding:12px; box-shadow:0 1px 4px rgba(0,0,0,0.08); margin-bottom:10px; display:flex; justify-content:space-between; align-items:flex-start; gap:8px; }
   .plan-entry-name { font-weight:700; font-size:0.9em; }
   .plan-entry-meta { font-size:0.78em; color:#556; margin-top:3px; }
+  .usage-card { background:#fff; border-radius:10px; padding:12px 14px; box-shadow:0 1px 4px rgba(0,0,0,0.08); margin-bottom:8px; }
+  .usage-card-name { font-weight:700; font-size:0.9em; color:#1f2a1f; }
+  .usage-card-total { font-size:0.95em; color:#2e5e2e; font-weight:700; margin-top:4px; }
+  .usage-card-warn { font-size:0.78em; color:#a3441d; margin-top:4px; }
   .plan-entry-actions { display:flex; gap:6px; flex-shrink:0; }
   .plan-entry-actions button { background:none; border:none; font-size:0.75em; font-weight:600; cursor:pointer; padding:2px 6px; }
   .maint-planned-row { display:flex; align-items:flex-start; gap:8px; padding:10px 10px 6px; border-left:4px solid transparent; }
@@ -558,6 +562,11 @@
           </select>
           <input type="text" id="d-planting-distance-row-other" placeholder="e.g. 90 cm" style="display:none; margin-top:8px;">
         </div>
+        <div class="field">
+          <label for="d-number-of-hills">Number of Hills</label>
+          <input type="number" id="d-number-of-hills" min="0" placeholder="e.g. 400">
+          <div class="field-hint">Used to compute total fertilizer needed for the whole trial (per-hill rates × this number).</div>
+        </div>
       </div>
 
       <div class="field">
@@ -658,6 +667,13 @@
       </div>
       <button class="add-btn" id="apply-preset-confirm-btn">Apply to This Trial</button>
     </div>
+
+    <div class="section-label" style="display:flex; justify-content:space-between; align-items:center; cursor:pointer;" id="total-usage-toggle">
+      <span>📦 Total Product Usage (This Trial)</span>
+      <span id="total-usage-toggle-arrow">▾</span>
+    </div>
+    <div id="total-usage-section" style="display:none; margin-bottom:14px;"></div>
+
     <div id="maint-list"></div>
     <div class="progress" id="maint-progress"></div>
 
@@ -720,7 +736,7 @@
 </div>
 
 <script>
-const APP_VERSION = '5.7';
+const APP_VERSION = '5.8';
 const STORAGE_KEY = 'trial-calendar-state-v3';
 
 // ---- Supabase cloud sync ----
@@ -1092,7 +1108,7 @@ function makeTrial(cropKey, variety, trialType, targetPestKey, targetPestOther) 
     id: 't' + Date.now(),
     details: {
       title: '', crop: meta.label, cropKey: cropKey, variety: variety || '', sowing: '', planting: todayStr(), trialType: trialType || '',
-      plantingDistance: '', plantingDistancePlant: '', plantingDistanceRow: '', targetPestKey: targetPestKey || '', targetPestOther: targetPestOther || '', location: null, locationName: '', rateKey: 'wet', totalAreaSqm: '', plotSizeSqm: ''
+      plantingDistance: '', plantingDistancePlant: '', plantingDistanceRow: '', numberOfHills: '', targetPestKey: targetPestKey || '', targetPestOther: targetPestOther || '', location: null, locationName: '', rateKey: 'wet', totalAreaSqm: '', plotSizeSqm: ''
     },
     appIntervalDays: 7,
     assessmentDays: [1, 3, 7],
@@ -1326,6 +1342,7 @@ function loadState() {
           if (typeof t.details.plantingDistanceRow !== 'string') t.details.plantingDistanceRow = '';
           if (typeof t.details.targetPestKey !== 'string') t.details.targetPestKey = '';
           if (typeof t.details.targetPestOther !== 'string') t.details.targetPestOther = '';
+          if (typeof t.details.numberOfHills !== 'string') t.details.numberOfHills = '';
           if (typeof t.archived !== 'boolean') t.archived = false;
         });
       }
@@ -1507,6 +1524,9 @@ function showTrial(id) {
   hideAllViews();
   viewTrial.style.display = 'block';
   backBtn.style.display = 'inline-block';
+  totalUsageOpen = false;
+  document.getElementById('total-usage-section').style.display = 'none';
+  document.getElementById('total-usage-toggle-arrow').textContent = '▾';
   const t = currentTrial();
   const meta = cropMeta(t.details.cropKey);
   appTitle.textContent = meta.emoji + ' ' + displayTitle(t);
@@ -2257,6 +2277,7 @@ function renderDetails() {
     solanaceousDistanceField.style.display = 'block';
     setDropdownWithOther(dPlantingDistancePlant, dPlantingDistancePlantOther, t.details.plantingDistancePlant, ['50 cm']);
     setDropdownWithOther(dPlantingDistanceRow, dPlantingDistanceRowOther, t.details.plantingDistanceRow, ['100 cm']);
+    document.getElementById('d-number-of-hills').value = t.details.numberOfHills || '';
   } else {
     genericDistanceField.style.display = 'block';
     dPlantingDistance.value = t.details.plantingDistance || '';
@@ -2287,6 +2308,12 @@ function wireDistanceDropdown(selectEl, otherInputEl, stateKey) {
 wireDistanceDropdown(dPlantingDistanceRice, dPlantingDistanceRiceOther, 'plantingDistance');
 wireDistanceDropdown(dPlantingDistancePlant, dPlantingDistancePlantOther, 'plantingDistancePlant');
 wireDistanceDropdown(dPlantingDistanceRow, dPlantingDistanceRowOther, 'plantingDistanceRow');
+document.getElementById('d-number-of-hills').addEventListener('change', function() {
+  const t = currentTrial(); if (!t) return;
+  t.details.numberOfHills = this.value;
+  saveState();
+  renderMaintenance();
+});
 
 const locationStatusEl = document.getElementById('location-status');
 const locationMapWrap = document.getElementById('location-map-wrap');
@@ -3091,8 +3118,84 @@ document.getElementById('apply-preset-confirm-btn').addEventListener('click', fu
 
 function categoryToType(category) { return category === 'fertilizer' ? 'fert' : 'pest'; }
 
+// ================= TOTAL PRODUCT USAGE =================
+let totalUsageOpen = false;
+document.getElementById('total-usage-toggle').addEventListener('click', function() {
+  totalUsageOpen = !totalUsageOpen;
+  document.getElementById('total-usage-section').style.display = totalUsageOpen ? 'block' : 'none';
+  document.getElementById('total-usage-toggle-arrow').textContent = totalUsageOpen ? '▴' : '▾';
+  if (totalUsageOpen) renderTotalUsage();
+});
+
+// Pulls a usable number+unit out of free-text rate notes, in priority order:
+// 1) "<num> <unit> total area" — already scaled to the whole area (e.g. rice's built-in fertilizer notes)
+// 2) "<num> <unit>/ha" — needs multiplying by this trial's Total Area
+// 3) "<num> <unit>/hill" — needs multiplying by this trial's Number of Hills
+function extractRateNumbers(text) {
+  if (!text) return null;
+  let m = text.match(/([\d.]+)\s*(kg|g|ml|l)\s+total area/i);
+  if (m) return { amount: parseFloat(m[1]), unit: m[2].toLowerCase(), mode: 'totalArea' };
+  m = text.match(/([\d.]+)\s*(kg|g|ml|l)\s*\/\s*ha\b/i);
+  if (m) return { amount: parseFloat(m[1]), unit: m[2].toLowerCase(), mode: 'perHa' };
+  m = text.match(/([\d.]+)\s*(kg|g|ml|l)\s*\/\s*hill\b/i);
+  if (m) return { amount: parseFloat(m[1]), unit: m[2].toLowerCase(), mode: 'perHill' };
+  return null;
+}
+
+function computeTotalUsageSummary(t) {
+  const totalAreaSqm = parseFloat(t.details.totalAreaSqm) || 0;
+  const totalAreaHa = totalAreaSqm / 10000;
+  const hillsCount = parseFloat(t.details.numberOfHills) || 0;
+
+  const groups = {}; // title -> { done: bool amounts per unit, unresolved: bool }
+
+  function addOccurrence(title, noteText) {
+    if (!groups[title]) groups[title] = { amounts: {}, unresolved: false, unresolvedReason: '' };
+    const parsed = extractRateNumbers(noteText);
+    if (!parsed) { groups[title].unresolved = true; groups[title].unresolvedReason = 'Rate not in a recognizable format (need "X/ha", "X/hill", or a computed total area value)'; return; }
+    let amount = null;
+    if (parsed.mode === 'totalArea') {
+      amount = parsed.amount;
+    } else if (parsed.mode === 'perHa') {
+      if (totalAreaHa <= 0) { groups[title].unresolved = true; groups[title].unresolvedReason = 'Set Total Area (sqm) in Details to compute this'; return; }
+      amount = parsed.amount * totalAreaHa;
+    } else if (parsed.mode === 'perHill') {
+      if (hillsCount <= 0) { groups[title].unresolved = true; groups[title].unresolvedReason = 'Set Number of Hills in Details to compute this'; return; }
+      amount = parsed.amount * hillsCount;
+    }
+    groups[title].amounts[parsed.unit] = (groups[title].amounts[parsed.unit] || 0) + amount;
+  }
+
+  computePlannedItems(t).forEach(function(ev) { addOccurrence(ev.title, ev.note); });
+  (t.customMaintenance || []).forEach(function(c) { addOccurrence(c.title, c.notes || ''); });
+
+  return groups;
+}
+
+function renderTotalUsage() {
+  const t = currentTrial(); if (!t) return;
+  const container = document.getElementById('total-usage-section');
+  const groups = computeTotalUsageSummary(t);
+  const titles = Object.keys(groups);
+  if (!titles.length) {
+    container.innerHTML = '<div class="empty-state">No schedule items yet to total up.</div>';
+    return;
+  }
+  container.innerHTML = titles.map(function(title) {
+    const g = groups[title];
+    if (g.unresolved && !Object.keys(g.amounts).length) {
+      return '<div class="usage-card"><div class="usage-card-name">' + title + '</div><div class="usage-card-warn">⚠ ' + g.unresolvedReason + '</div></div>';
+    }
+    const totalsText = Object.keys(g.amounts).map(function(unit) {
+      return round(g.amounts[unit], 2) + ' ' + unit;
+    }).join(' + ');
+    return '<div class="usage-card"><div class="usage-card-name">' + title + '</div><div class="usage-card-total">Total: ' + totalsText + '</div>' + (g.unresolved ? '<div class="usage-card-warn">⚠ Some occurrences of this item weren\'t counted — ' + g.unresolvedReason + '</div>' : '') + '</div>';
+  }).join('');
+}
+
 function renderMaintenance() {
   const t = currentTrial(); if (!t) return;
+  if (totalUsageOpen) renderTotalUsage();
   const planting = t.details.planting;
   maintList.innerHTML = '';
 
