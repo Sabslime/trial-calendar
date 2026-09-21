@@ -228,6 +228,9 @@
   .rf-crop-row { border:1px solid #e3e8df; border-radius:8px; padding:10px; margin-bottom:10px; position:relative; }
   .rf-crop-row .remove-crop-row-btn { position:absolute; top:8px; right:8px; background:#fbe6dd; color:#a3441d; border:none; border-radius:6px; padding:4px 8px; font-size:0.7em; font-weight:600; cursor:pointer; }
   .rf-target-row { background:#fafbf8; border:1px solid #e3e8df; border-radius:8px; padding:10px; margin-top:8px; position:relative; }
+  .crop-program-row { background:#fff; border-radius:10px; padding:12px; box-shadow:0 1px 4px rgba(0,0,0,0.08); margin-bottom:10px; position:relative; }
+  .crop-program-row .remove-program-row-btn { position:absolute; top:10px; right:10px; background:#fbe6dd; color:#a3441d; border:none; border-radius:6px; padding:4px 8px; font-size:0.68em; font-weight:600; cursor:pointer; }
+  .crop-program-row-grid { display:grid; grid-template-columns: 80px 110px; gap:8px; margin-bottom:8px; }
   .rf-target-row .remove-target-row-btn { position:absolute; top:8px; right:8px; background:#fbe6dd; color:#a3441d; border:none; border-radius:6px; padding:4px 8px; font-size:0.68em; font-weight:600; cursor:pointer; }
 </style>
 </head>
@@ -264,6 +267,7 @@
   <div class="home-nav-row">
     <div class="home-nav-btn" id="go-rates-btn">Rate Reference</div>
     <div class="home-nav-btn" id="go-presets-btn">Presets</div>
+    <div class="home-nav-btn" id="go-crop-programs-btn">Crop Programs</div>
     <div class="home-nav-btn" id="go-reminders-btn">Reminders</div>
     <div class="home-nav-btn" id="go-archived-btn">Archived</div>
     <div class="home-nav-btn" id="go-settings-btn">Settings</div>
@@ -432,6 +436,13 @@
 
     <button class="add-btn" id="pf-save-btn" style="margin-top:22px;">Save Preset</button>
   </div>
+</div>
+
+<div id="view-crop-programs" class="home-wrap" style="display:none;">
+  <div class="field-hint" style="margin-bottom:12px;">Edits here apply immediately to every Eggplant, Tomato, and Chili trial — not a one-time apply like Presets.</div>
+  <div id="crop-program-rows"></div>
+  <button class="add-btn secondary" id="add-crop-program-row-btn">+ Add Item</button>
+  <button class="add-btn" id="save-crop-program-btn" style="margin-top:14px;">Save Changes</button>
 </div>
 
 <div id="view-reminders" class="home-wrap" style="display:none;">
@@ -745,7 +756,7 @@
 </div>
 
 <script>
-const APP_VERSION = '6.1';
+const APP_VERSION = '6.3';
 const STORAGE_KEY = 'trial-calendar-state-v3';
 
 // ---- Supabase cloud sync ----
@@ -795,7 +806,8 @@ function collectAllLocalData() {
     rateLibrary: rateLibrary,
     settings: appSettings,
     presets: presets,
-    extReminders: extReminders
+    extReminders: extReminders,
+    cropPrograms: cropPrograms
   };
 }
 function applyAllLocalData(data) {
@@ -819,6 +831,10 @@ function applyAllLocalData(data) {
   if (Array.isArray(data.extReminders)) {
     extReminders = data.extReminders;
     saveExtReminders();
+  }
+  if (data.cropPrograms && Array.isArray(data.cropPrograms.solanaceous)) {
+    cropPrograms = data.cropPrograms;
+    saveCropPrograms();
   }
   isApplyingRemote = false;
 }
@@ -1065,7 +1081,7 @@ function solanaceousFertItems() {
     items.push({ id: 'sol_' + title.replace(/[^a-z0-9]/gi, '').toLowerCase() + '_' + dat + '_' + items.length, dat: dat, type: 'fert', title: title, note: note });
   }
   add(0, 'Unik 16', '5 g/hill');
-  add(0, 'Crop Boost', '50–100 ml/16L (spray)');
+  add(0, 'Crop Boost', '50–100 ml/16L (spray) — 300 li/ha (spray volume)');
   // Vegetative stage 3–15 DAT, every 3 days
   for (let d = 3; d <= 15; d += 3) {
     add(d, 'Nitrabor (drench)', '150 g/16L (150 ml drenching) — vegetative stage');
@@ -1079,15 +1095,15 @@ function solanaceousFertItems() {
   for (let d = 46; d <= 55; d += 5) {
     add(d, 'Winner', '5 g/hill — flowering to fruiting');
     add(d, 'Nitrabor', '5 g/hill — flowering to fruiting');
-    add(d, 'Bortrac', '30 ml/16L spray — flowering to fruiting');
-    add(d, 'Caltrac', '100 ml/16L spray — flowering to fruiting');
+    add(d, 'Bortrac', '30 ml/16L spray — 400 li/ha (spray volume) — flowering to fruiting');
+    add(d, 'Caltrac', '100 ml/16L spray — 400 li/ha (spray volume) — flowering to fruiting');
   }
   // Harvesting 56–120 DAT, weekly
   for (let d = 56; d <= 120; d += 7) {
     add(d, 'Winner', '10 g/hill — harvesting stage');
     add(d, 'Nitrabor', '10 g/hill — harvesting stage');
-    add(d, 'Bortrac', '30 ml/16L spray — harvesting stage');
-    add(d, 'Caltrac', '100 ml/16L spray — harvesting stage');
+    add(d, 'Bortrac', '30 ml/16L spray — 500 li/ha (spray volume) — harvesting stage');
+    add(d, 'Caltrac', '100 ml/16L spray — 500 li/ha (spray volume) — harvesting stage');
   }
   return items;
 }
@@ -1098,7 +1114,9 @@ function computePlannedItems(trial) {
     return riceFertItems(d.rateKey || 'wet', parseFloat(d.totalAreaSqm) || 0, parseFloat(d.plotSizeSqm) || 0);
   }
   if (isSolanaceous(trial.details.cropKey)) {
-    return solanaceousFertItems();
+    return (cropPrograms.solanaceous || []).map(function(item, idx) {
+      return Object.assign({ id: 'solprog_' + idx }, item);
+    });
   }
   return [];
 }
@@ -1217,6 +1235,48 @@ function loadPresets() {
 function savePresets() {
   try { localStorage.setItem(PRESETS_STORAGE_KEY, JSON.stringify(presets)); }
   catch (e) { console.error('Presets save failed', e); }
+  if (!isApplyingRemote) queueCloudSync();
+}
+
+// ---- Crop Programs (live-editable default schedules — edits apply immediately to every trial of that crop group, not a one-time apply like Presets) ----
+const CROP_PROGRAMS_STORAGE_KEY = 'trial-calendar-crop-programs-v1';
+function defaultSolanaceousProgram() {
+  const items = [];
+  function add(dat, title, note) { items.push({ dat: dat, type: 'fert', title: title, note: note }); }
+  add(0, 'Unik 16', '5 g/hill');
+  add(0, 'Crop Boost', '50–100 ml/16L (spray) — 300 li/ha (spray volume)');
+  for (let d = 3; d <= 15; d += 3) add(d, 'Nitrabor (drench)', '150 g/16L (150 ml drenching) — vegetative stage');
+  for (let d = 16; d <= 45; d += 7) {
+    add(d, 'Unik 16', '5 g/hill — late vegetative stage');
+    add(d, 'Nitrabor', '5 g/hill — late vegetative stage');
+  }
+  for (let d = 46; d <= 55; d += 5) {
+    add(d, 'Winner', '5 g/hill — flowering to fruiting');
+    add(d, 'Nitrabor', '5 g/hill — flowering to fruiting');
+    add(d, 'Bortrac', '30 ml/16L spray — 400 li/ha (spray volume) — flowering to fruiting');
+    add(d, 'Caltrac', '100 ml/16L spray — 400 li/ha (spray volume) — flowering to fruiting');
+  }
+  for (let d = 56; d <= 120; d += 7) {
+    add(d, 'Winner', '10 g/hill — harvesting stage');
+    add(d, 'Nitrabor', '10 g/hill — harvesting stage');
+    add(d, 'Bortrac', '30 ml/16L spray — 500 li/ha (spray volume) — harvesting stage');
+    add(d, 'Caltrac', '100 ml/16L spray — 500 li/ha (spray volume) — harvesting stage');
+  }
+  return items;
+}
+let cropPrograms = { solanaceous: defaultSolanaceousProgram() };
+function loadCropPrograms() {
+  try {
+    const raw = localStorage.getItem(CROP_PROGRAMS_STORAGE_KEY);
+    if (raw) {
+      const saved = JSON.parse(raw);
+      if (saved && Array.isArray(saved.solanaceous)) cropPrograms = saved;
+    }
+  } catch (e) { }
+}
+function saveCropPrograms() {
+  try { localStorage.setItem(CROP_PROGRAMS_STORAGE_KEY, JSON.stringify(cropPrograms)); }
+  catch (e) { console.error('Crop programs save failed', e); }
   if (!isApplyingRemote) queueCloudSync();
 }
 
@@ -1417,6 +1477,7 @@ const viewHome = document.getElementById('view-home');
 const viewNew = document.getElementById('view-new');
 const viewRates = document.getElementById('view-rates');
 const viewPresets = document.getElementById('view-presets');
+const viewCropPrograms = document.getElementById('view-crop-programs');
 const viewReminders = document.getElementById('view-reminders');
 const viewArchived = document.getElementById('view-archived');
 const viewTrial = document.getElementById('view-trial');
@@ -1433,6 +1494,7 @@ function hideAllViews() {
   viewNew.style.display = 'none';
   viewRates.style.display = 'none';
   viewPresets.style.display = 'none';
+  viewCropPrograms.style.display = 'none';
   viewReminders.style.display = 'none';
   viewArchived.style.display = 'none';
   viewSettings.style.display = 'none';
@@ -1509,6 +1571,59 @@ function showReminders() {
   document.getElementById('reminder-new-input').value = '';
   renderExtReminders();
 }
+
+function showCropPrograms() {
+  hideAllViews();
+  viewCropPrograms.style.display = 'block';
+  backBtn.style.display = 'inline-block';
+  appTitle.textContent = 'Crop Programs';
+  headerSub.textContent = 'Solanaceous — Eggplant, Tomato, Chili';
+  renderCropProgramRows();
+}
+document.getElementById('go-crop-programs-btn').addEventListener('click', showCropPrograms);
+
+function renderCropProgramRows() {
+  const container = document.getElementById('crop-program-rows');
+  container.innerHTML = '';
+  cropPrograms.solanaceous.forEach(function(item, idx) {
+    const row = document.createElement('div');
+    row.className = 'crop-program-row';
+    row.innerHTML = '<button type="button" class="remove-program-row-btn" data-idx="' + idx + '">Remove</button>' +
+      '<div class="crop-program-row-grid">' +
+        '<div class="field" style="margin-bottom:0;"><label>DAT</label><input type="number" class="cp-dat-input" min="0" value="' + item.dat + '"></div>' +
+        '<div class="field" style="margin-bottom:0;"><label>Type</label><select class="cp-type-input"><option value="fert"' + (item.type === 'fert' ? ' selected' : '') + '>Fertilizer</option><option value="pest"' + (item.type === 'pest' ? ' selected' : '') + '>Pest</option></select></div>' +
+      '</div>' +
+      '<div class="field" style="margin-bottom:6px;"><label>Product / Activity</label><input type="text" class="cp-title-input" value="' + item.title + '"></div>' +
+      '<div class="field" style="margin-bottom:0;"><label>Notes</label><input type="text" class="cp-note-input" value="' + item.note + '"></div>';
+    container.appendChild(row);
+  });
+  container.querySelectorAll('.remove-program-row-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      cropPrograms.solanaceous.splice(parseInt(btn.dataset.idx, 10), 1);
+      renderCropProgramRows();
+    });
+  });
+}
+document.getElementById('add-crop-program-row-btn').addEventListener('click', function() {
+  cropPrograms.solanaceous.push({ dat: 0, type: 'fert', title: '', note: '' });
+  renderCropProgramRows();
+});
+document.getElementById('save-crop-program-btn').addEventListener('click', function() {
+  const rows = document.querySelectorAll('#crop-program-rows .crop-program-row');
+  const updated = [];
+  rows.forEach(function(row) {
+    updated.push({
+      dat: parseInt(row.querySelector('.cp-dat-input').value, 10) || 0,
+      type: row.querySelector('.cp-type-input').value,
+      title: row.querySelector('.cp-title-input').value.trim(),
+      note: row.querySelector('.cp-note-input').value.trim()
+    });
+  });
+  cropPrograms.solanaceous = updated.filter(function(item) { return item.title; });
+  saveCropPrograms();
+  alert('Saved. This now applies to every Eggplant, Tomato, and Chili trial.');
+  renderCropProgramRows();
+});
 
 function showArchived() {
   hideAllViews();
@@ -2019,8 +2134,8 @@ function addTargetRow(targetsContainer, targetVal, tankVal, haVal, timingVal, in
   const isCustomInterval = intervalVal && fixedIntervals.indexOf(intervalVal) === -1;
   row.innerHTML = '<button type="button" class="remove-target-row-btn">Remove this target</button>' +
     '<div class="field"><label>' + targetLabel + '</label><input type="text" class="rf-target-name-input" placeholder="' + targetPlaceholder + '" value="' + (targetVal || '') + '"></div>' +
-    '<div class="field"><label>Rate per Tank (ml)</label><input type="text" class="rf-target-tank-input" placeholder="e.g. 20 ml / 16L" value="' + (tankVal || '') + '"></div>' +
-    '<div class="field"><label>Rate per ha (ml)</label><input type="text" class="rf-target-ha-input" placeholder="e.g. 500 ml/ha" value="' + (haVal || '') + '"></div>' +
+    '<div class="field"><label>Rate per Tank</label><input type="text" class="rf-target-tank-input" placeholder="e.g. 20 ml/16L or 5 g/16L" value="' + (tankVal || '') + '"></div>' +
+    '<div class="field"><label>Rate per ha</label><input type="text" class="rf-target-ha-input" placeholder="e.g. 500 ml/ha, 300 li/ha, or 5 kg/ha" value="' + (haVal || '') + '"><div class="field-hint">This is what Supplies uses to compute total needed for your area — type the unit you actually use (ml, li/L, g, or kg).</div></div>' +
     '<div class="field"><label>Recommended Start (DAT)</label><input type="number" class="rf-target-startdat-input" placeholder="e.g. 7" min="0" value="' + (startDatVal !== null && startDatVal !== undefined ? startDatVal : '') + '"><div class="field-hint">If set, picking this target in "+ Add Item" auto-calculates the date from your trial\'s Planting Date.</div></div>' +
     '<div class="field"><label>Application Timing (notes)</label><input type="text" class="rf-target-timing-input" placeholder="e.g. 7 DAT" value="' + (timingVal || '') + '"></div>' +
     '<div class="field"><label>Reapplication Interval (optional)</label><select class="rf-target-interval-select">' +
@@ -3557,6 +3672,7 @@ loadSettings();
 loadRateLibrary();
 loadPresets();
 loadExtReminders();
+loadCropPrograms();
 showHome();
 initAuth();
 
