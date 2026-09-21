@@ -352,6 +352,15 @@
       <label>Formulation</label>
       <input type="text" id="rf-formulation" placeholder="e.g. 250 SC, OD, WP">
     </div>
+    <div class="field">
+      <label>Package Size (optional)</label>
+      <div style="display:flex; gap:8px;">
+        <input type="number" id="rf-package-size" min="0.01" step="any" placeholder="e.g. 50" style="flex:1;">
+        <input type="text" id="rf-package-unit" placeholder="unit, e.g. kg" style="flex:1;">
+        <input type="text" id="rf-package-label" placeholder="label, e.g. sack" style="flex:1;">
+      </div>
+      <div class="field-hint">e.g. 50 / kg / sack — used in the Supplies tab to show "buy X sacks" instead of raw kg.</div>
+    </div>
     <div class="section-label">Rate per Crop</div>
     <div id="rf-crop-rows"></div>
     <button class="add-btn secondary" id="rf-add-crop-row-btn" type="button">+ Add Crop Rate</button>
@@ -482,6 +491,7 @@
     <button class="tab-btn" data-tab="details">Details</button>
     <button class="tab-btn" data-tab="application">Application</button>
     <button class="tab-btn" data-tab="maintenance">Maintenance</button>
+    <button class="tab-btn" data-tab="supplies">Supplies</button>
   </div>
 
   <div class="panel active" id="panel-overview">
@@ -668,12 +678,6 @@
       <button class="add-btn" id="apply-preset-confirm-btn">Apply to This Trial</button>
     </div>
 
-    <div class="section-label" style="display:flex; justify-content:space-between; align-items:center; cursor:pointer;" id="total-usage-toggle">
-      <span>📦 Total Product Usage (This Trial)</span>
-      <span id="total-usage-toggle-arrow">▾</span>
-    </div>
-    <div id="total-usage-section" style="display:none; margin-bottom:14px;"></div>
-
     <div id="maint-list"></div>
     <div class="progress" id="maint-progress"></div>
 
@@ -733,10 +737,15 @@
 
     <footer id="maint-footer">Planned dates are based on Planting Date. Actual DAT recomputes from the date you log.</footer>
   </div>
+
+  <div class="panel" id="panel-supplies">
+    <div class="field-hint" style="margin-bottom:12px;">Computed from your Maintenance schedule, Total Area, and Number of Hills. Set a Package Size for a product in Rate Reference to see "buy X sacks/bottles" here.</div>
+    <div id="supplies-list"></div>
+  </div>
 </div>
 
 <script>
-const APP_VERSION = '5.8';
+const APP_VERSION = '5.9';
 const STORAGE_KEY = 'trial-calendar-state-v3';
 
 // ---- Supabase cloud sync ----
@@ -1134,6 +1143,9 @@ let rateLibrary = { fertilizer: [], insecticide: [], herbicide: [], fungicide: [
 function migrateRateEntry(e) {
   if (typeof e.activeIngredient !== 'string') e.activeIngredient = '';
   if (typeof e.formulation !== 'string') e.formulation = '';
+  if (e.packageSize === undefined) e.packageSize = null;
+  if (typeof e.packageUnit !== 'string') e.packageUnit = '';
+  if (typeof e.packageLabel !== 'string') e.packageLabel = '';
   // Oldest format had flat rateTank/rateHa/timing fields at product level — migrate to cropRates array (unspecified crop)
   if (!e.cropRates) {
     e.cropRates = [];
@@ -1524,9 +1536,6 @@ function showTrial(id) {
   hideAllViews();
   viewTrial.style.display = 'block';
   backBtn.style.display = 'inline-block';
-  totalUsageOpen = false;
-  document.getElementById('total-usage-section').style.display = 'none';
-  document.getElementById('total-usage-toggle-arrow').textContent = '▾';
   const t = currentTrial();
   const meta = cropMeta(t.details.cropKey);
   appTitle.textContent = meta.emoji + ' ' + displayTitle(t);
@@ -2046,6 +2055,9 @@ function openRateForm(existingEntry) {
     document.getElementById('rf-name').value = existingEntry.name || '';
     document.getElementById('rf-ai').value = existingEntry.activeIngredient || '';
     document.getElementById('rf-formulation').value = existingEntry.formulation || '';
+    document.getElementById('rf-package-size').value = existingEntry.packageSize || '';
+    document.getElementById('rf-package-unit').value = existingEntry.packageUnit || '';
+    document.getElementById('rf-package-label').value = existingEntry.packageLabel || '';
     (existingEntry.cropRates || []).forEach(function(cr) {
       addCropRow(cr.crop, cr.targets);
     });
@@ -2055,6 +2067,9 @@ function openRateForm(existingEntry) {
     document.getElementById('rf-name').value = '';
     document.getElementById('rf-ai').value = '';
     document.getElementById('rf-formulation').value = '';
+    document.getElementById('rf-package-size').value = '';
+    document.getElementById('rf-package-unit').value = '';
+    document.getElementById('rf-package-label').value = '';
     addCropRow();
   }
   rateFormCard.scrollIntoView({ behavior:'smooth', block:'nearest' });
@@ -2067,6 +2082,10 @@ document.getElementById('rf-save-btn').addEventListener('click', function() {
   if (!name) { alert('Enter a product name first.'); return; }
   const activeIngredient = document.getElementById('rf-ai').value.trim();
   const formulation = document.getElementById('rf-formulation').value.trim();
+  const packageSizeRaw = document.getElementById('rf-package-size').value.trim();
+  const packageSize = packageSizeRaw ? parseFloat(packageSizeRaw) : null;
+  const packageUnit = document.getElementById('rf-package-unit').value.trim();
+  const packageLabel = document.getElementById('rf-package-label').value.trim();
 
   const cropRates = [];
   rfCropRows.querySelectorAll('.rf-crop-row').forEach(function(block) {
@@ -2095,9 +2114,9 @@ document.getElementById('rf-save-btn').addEventListener('click', function() {
     ['fertilizer','insecticide','herbicide','fungicide'].forEach(function(cat) {
       rateLibrary[cat] = (rateLibrary[cat] || []).filter(function(x) { return x.id !== editingRateId; });
     });
-    rateLibrary[category].push({ id: editingRateId, name: name, activeIngredient: activeIngredient, formulation: formulation, cropRates: cropRates });
+    rateLibrary[category].push({ id: editingRateId, name: name, activeIngredient: activeIngredient, formulation: formulation, packageSize: packageSize, packageUnit: packageUnit, packageLabel: packageLabel, cropRates: cropRates });
   } else {
-    rateLibrary[category].push({ id: 'r' + Date.now(), name: name, activeIngredient: activeIngredient, formulation: formulation, cropRates: cropRates });
+    rateLibrary[category].push({ id: 'r' + Date.now(), name: name, activeIngredient: activeIngredient, formulation: formulation, packageSize: packageSize, packageUnit: packageUnit, packageLabel: packageLabel, cropRates: cropRates });
   }
 
   saveRateLibrary();
@@ -2175,6 +2194,7 @@ document.querySelectorAll('.tab-btn[data-tab]').forEach(function(btn) {
     document.getElementById('panel-' + btn.dataset.tab).classList.add('active');
     if (btn.dataset.tab === 'overview') renderOverview();
     if (btn.dataset.tab === 'details') setDetailsLocked(true);
+    if (btn.dataset.tab === 'supplies') renderSupplies();
     updateFabVisibility(btn.dataset.tab);
   });
 });
@@ -3118,15 +3138,7 @@ document.getElementById('apply-preset-confirm-btn').addEventListener('click', fu
 
 function categoryToType(category) { return category === 'fertilizer' ? 'fert' : 'pest'; }
 
-// ================= TOTAL PRODUCT USAGE =================
-let totalUsageOpen = false;
-document.getElementById('total-usage-toggle').addEventListener('click', function() {
-  totalUsageOpen = !totalUsageOpen;
-  document.getElementById('total-usage-section').style.display = totalUsageOpen ? 'block' : 'none';
-  document.getElementById('total-usage-toggle-arrow').textContent = totalUsageOpen ? '▴' : '▾';
-  if (totalUsageOpen) renderTotalUsage();
-});
-
+// ================= SUPPLIES TAB =================
 // Pulls a usable number+unit out of free-text rate notes, in priority order:
 // 1) "<num> <unit> total area" — already scaled to the whole area (e.g. rice's built-in fertilizer notes)
 // 2) "<num> <unit>/ha" — needs multiplying by this trial's Total Area
@@ -3142,12 +3154,22 @@ function extractRateNumbers(text) {
   return null;
 }
 
+// Finds the saved Rate Reference product matching a schedule item's title, across all categories
+function findProductByName(name) {
+  const categories = ['fertilizer', 'insecticide', 'herbicide', 'fungicide'];
+  for (let i = 0; i < categories.length; i++) {
+    const found = (rateLibrary[categories[i]] || []).find(function(p) { return p.name === name; });
+    if (found) return found;
+  }
+  return null;
+}
+
 function computeTotalUsageSummary(t) {
   const totalAreaSqm = parseFloat(t.details.totalAreaSqm) || 0;
   const totalAreaHa = totalAreaSqm / 10000;
   const hillsCount = parseFloat(t.details.numberOfHills) || 0;
 
-  const groups = {}; // title -> { done: bool amounts per unit, unresolved: bool }
+  const groups = {}; // title -> { amounts per unit, unresolved: bool }
 
   function addOccurrence(title, noteText) {
     if (!groups[title]) groups[title] = { amounts: {}, unresolved: false, unresolvedReason: '' };
@@ -3172,13 +3194,13 @@ function computeTotalUsageSummary(t) {
   return groups;
 }
 
-function renderTotalUsage() {
+function renderSupplies() {
   const t = currentTrial(); if (!t) return;
-  const container = document.getElementById('total-usage-section');
+  const container = document.getElementById('supplies-list');
   const groups = computeTotalUsageSummary(t);
   const titles = Object.keys(groups);
   if (!titles.length) {
-    container.innerHTML = '<div class="empty-state">No schedule items yet to total up.</div>';
+    container.innerHTML = '<div class="empty-state">No schedule items yet to total up. Build your Maintenance schedule first.</div>';
     return;
   }
   container.innerHTML = titles.map(function(title) {
@@ -3189,13 +3211,25 @@ function renderTotalUsage() {
     const totalsText = Object.keys(g.amounts).map(function(unit) {
       return round(g.amounts[unit], 2) + ' ' + unit;
     }).join(' + ');
-    return '<div class="usage-card"><div class="usage-card-name">' + title + '</div><div class="usage-card-total">Total: ' + totalsText + '</div>' + (g.unresolved ? '<div class="usage-card-warn">⚠ Some occurrences of this item weren\'t counted — ' + g.unresolvedReason + '</div>' : '') + '</div>';
+
+    // Try to convert into purchasable packages, if this product has a Package Size saved
+    let packageHtml = '';
+    const product = findProductByName(title);
+    if (product && product.packageSize && product.packageUnit) {
+      const matchingAmount = g.amounts[product.packageUnit.toLowerCase()];
+      if (matchingAmount !== undefined) {
+        const packagesNeeded = Math.ceil(matchingAmount / product.packageSize);
+        const label = product.packageLabel || 'package';
+        packageHtml = '<div class="usage-card-total" style="color:#8a5a10;">🛒 Buy: ' + packagesNeeded + ' ' + label + (packagesNeeded !== 1 ? 's' : '') + ' (' + product.packageSize + ' ' + product.packageUnit + '/' + label + ')</div>';
+      }
+    }
+
+    return '<div class="usage-card"><div class="usage-card-name">' + title + '</div><div class="usage-card-total">Total needed: ' + totalsText + '</div>' + packageHtml + (g.unresolved ? '<div class="usage-card-warn">⚠ Some occurrences of this item weren\'t counted — ' + g.unresolvedReason + '</div>' : '') + '</div>';
   }).join('');
 }
 
 function renderMaintenance() {
   const t = currentTrial(); if (!t) return;
-  if (totalUsageOpen) renderTotalUsage();
   const planting = t.details.planting;
   maintList.innerHTML = '';
 
