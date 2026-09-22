@@ -20,7 +20,7 @@
   .sub { color:#556; font-size:0.82em; margin-top:2px; }
   .ver { color:#aab; font-size:0.68em; text-align:right; padding:2px 16px 0; }
 
-  .tabs { display:flex; position:sticky; top:0; background:#f4f6f2; z-index:10; border-bottom:2px solid #dde3d9; padding:0 8px; overflow-x:auto; }
+  .tabs { display:flex; flex-wrap:wrap; position:sticky; top:0; background:#f4f6f2; z-index:10; border-bottom:2px solid #dde3d9; padding:4px 8px; }
   .tab-btn { flex:1; text-align:center; padding:12px 4px; font-size:0.85em; font-weight:600; color:#789; background:none; border:none; border-bottom:3px solid transparent; cursor:pointer; white-space:nowrap; }
   .tab-btn.active { color:#2e5e2e; border-bottom:3px solid #2e5e2e; }
 
@@ -150,8 +150,8 @@
   footer { font-size:0.72em; color:#889; margin-top:14px; text-align:center; padding: 0 16px 20px; }
 
   .home-wrap { padding:14px 16px; }
-  .home-nav-row { display:flex; gap:10px; margin-bottom:14px; }
-  .home-nav-btn { flex:1; background:#fff; border:1px solid #dde3d9; border-radius:10px; padding:12px 8px; text-align:center; font-size:0.82em; font-weight:600; color:#2e5e2e; cursor:pointer; }
+  .home-nav-row { display:grid; grid-template-columns: repeat(3, 1fr); gap:8px; margin-bottom:14px; }
+  .home-nav-btn { background:#fff; border:1px solid #dde3d9; border-radius:10px; padding:12px 6px; text-align:center; font-size:0.78em; font-weight:600; color:#2e5e2e; cursor:pointer; }
   .trial-card { background:#fff; border-radius:12px; padding:14px; box-shadow:0 1px 4px rgba(0,0,0,0.08); margin-bottom:12px; display:flex; align-items:center; gap:12px; cursor:pointer; }
   .reminders-wrap { margin-bottom:18px; }
   .reminder-heading { display:flex; align-items:center; gap:8px; margin:0 2px 8px; }
@@ -482,6 +482,15 @@
   </div>
 
   <div class="card">
+    <div class="section-label">Spray Volume Reference</div>
+    <div class="field-hint" style="margin-bottom:8px;">Standard spray volume by growth stage for insecticide/fungicide sprays — used as a guide when setting rates in Rate Reference or Crop Programs.</div>
+    <div class="rate-crop-row"><b>Early stage:</b> 300 li/ha</div>
+    <div class="rate-crop-row"><b>Vegetative stage:</b> 400 li/ha</div>
+    <div class="rate-crop-row"><b>Reproductive stage:</b> 500 li/ha</div>
+    <div class="rate-crop-row"><b>Rice (typical):</b> ~10 tanks/ha (16L tanks) ≈ 160 li/ha</div>
+  </div>
+
+  <div class="card">
     <div class="section-label">Location Names</div>
     <div class="field">
       <label for="settings-locationiq-key">LocationIQ API Key (optional)</label>
@@ -762,7 +771,7 @@
 </div>
 
 <script>
-const APP_VERSION = '6.6';
+const APP_VERSION = '6.9';
 const STORAGE_KEY = 'trial-calendar-state-v3';
 
 // ---- Supabase cloud sync ----
@@ -1101,8 +1110,8 @@ function solanaceousFertItems() {
   for (let d = 46; d <= 55; d += 5) {
     add(d, 'Winner', '5 g/hill — flowering to fruiting');
     add(d, 'Nitrabor', '5 g/hill — flowering to fruiting');
-    add(d, 'Bortrac', '30 ml/16L spray — 400 li/ha (spray volume) — flowering to fruiting');
-    add(d, 'Caltrac', '100 ml/16L spray — 400 li/ha (spray volume) — flowering to fruiting');
+    add(d, 'Bortrac', '30 ml/16L spray — 500 li/ha (spray volume) — flowering to fruiting');
+    add(d, 'Caltrac', '100 ml/16L spray — 500 li/ha (spray volume) — flowering to fruiting');
   }
   // Harvesting 56–120 DAT, weekly
   for (let d = 56; d <= 120; d += 7) {
@@ -1260,8 +1269,8 @@ function defaultSolanaceousProgram() {
   for (let d = 46; d <= 55; d += 5) {
     add(d, 'Winner', '5 g/hill', 'Flowering to Fruiting (46–55 DAT)');
     add(d, 'Nitrabor', '5 g/hill', 'Flowering to Fruiting (46–55 DAT)');
-    add(d, 'Bortrac', '30 ml/16L spray — 400 li/ha (spray volume)', 'Flowering to Fruiting (46–55 DAT)');
-    add(d, 'Caltrac', '100 ml/16L spray — 400 li/ha (spray volume)', 'Flowering to Fruiting (46–55 DAT)');
+    add(d, 'Bortrac', '30 ml/16L spray — 500 li/ha (spray volume)', 'Flowering to Fruiting (46–55 DAT)');
+    add(d, 'Caltrac', '100 ml/16L spray — 500 li/ha (spray volume)', 'Flowering to Fruiting (46–55 DAT)');
   }
   for (let d = 56; d <= 120; d += 7) {
     add(d, 'Winner', '10 g/hill', 'Harvesting (56–120 DAT)');
@@ -1622,6 +1631,16 @@ function showCropProgramEditor(groupKey) {
   renderCropProgramRows();
 }
 
+// Suggests standard spray volume (li/ha) based on keywords in a stage label — early/vegetative/reproductive convention
+function suggestSprayVolumeForStage(stage) {
+  if (!stage) return null;
+  const s = stage.toLowerCase();
+  if (s.indexOf('flowering') !== -1 || s.indexOf('fruiting') !== -1 || s.indexOf('reproductive') !== -1 || s.indexOf('harvest') !== -1) return '500 li/ha (reproductive stage)';
+  if (s.indexOf('vegetative') !== -1) return '400 li/ha (vegetative stage)';
+  if (s.indexOf('basal') !== -1 || s.indexOf('early') !== -1 || s.indexOf('seedling') !== -1) return '300 li/ha (early stage)';
+  return null;
+}
+
 function renderCropProgramRows() {
   const container = document.getElementById('crop-program-rows');
   container.innerHTML = '';
@@ -1653,6 +1672,8 @@ function renderCropProgramRows() {
     stageGroups[stage].forEach(function(item) {
       const itemRow = document.createElement('div');
       itemRow.className = 'crop-program-row';
+      const suggestedVolume = suggestSprayVolumeForStage(item.stage);
+      const volumeHintHtml = (item.type === 'pest' && suggestedVolume) ? '<div class="field-hint" style="margin-top:6px;">💡 Suggested spray volume for this stage: <b>' + suggestedVolume + '</b> — add it to Notes like "500 li/ha" if this is a foliar spray.</div>' : '';
       itemRow.innerHTML =
         '<div class="crop-program-item-summary" style="cursor:pointer; display:flex; justify-content:space-between; align-items:center;">' +
           '<span><b>' + item.dat + ' DAT</b> — ' + (item.title || '(untitled)') + '</span>' +
@@ -1666,7 +1687,7 @@ function renderCropProgramRows() {
           '</div>' +
           '<div class="field" style="margin-bottom:6px;"><label>Stage</label><input type="text" class="cp-stage-input" value="' + (item.stage || '') + '" placeholder="e.g. Flowering to Fruiting (46–55 DAT)"></div>' +
           '<div class="field" style="margin-bottom:6px;"><label>Product / Activity</label><input type="text" class="cp-title-input" value="' + item.title + '"></div>' +
-          '<div class="field" style="margin-bottom:0;"><label>Notes</label><input type="text" class="cp-note-input" value="' + item.note + '"></div>' +
+          '<div class="field" style="margin-bottom:0;"><label>Notes</label><input type="text" class="cp-note-input" value="' + item.note + '">' + volumeHintHtml + '</div>' +
         '</div>';
       itemRow.dataset.idx = item.originalIndex;
       const summary = itemRow.querySelector('.crop-program-item-summary');
@@ -2409,8 +2430,16 @@ function renderRatesList() {
       });
       cropBlocks += '<div class="rate-crop-block"><div class="rate-crop-name">' + (cr.crop || 'Unspecified crop') + '</div>' + targetRows + '</div>';
     });
-    div.innerHTML = '<div class="rate-entry-head"><div class="rate-entry-name">' + e.name + (e.formulation ? '<span class="rate-entry-formulation">' + e.formulation + '</span>' : '') + renderAiBadges(e.activeIngredient) + '</div><div class="rate-entry-actions"><button class="rate-edit-btn" data-id="' + e.id + '">Edit</button><button class="maint-remove-btn" data-id="' + e.id + '">Remove</button></div></div>' +
-      cropBlocks;
+    div.innerHTML = '<div class="rate-entry-head" style="cursor:pointer;"><div class="rate-entry-name">' + e.name + (e.formulation ? '<span class="rate-entry-formulation">' + e.formulation + '</span>' : '') + renderAiBadges(e.activeIngredient) + '</div><div class="rate-entry-actions"><span class="rate-entry-arrow" style="color:#aab; margin-right:4px;">▾</span><button class="rate-edit-btn" data-id="' + e.id + '">Edit</button><button class="maint-remove-btn" data-id="' + e.id + '">Remove</button></div></div>' +
+      '<div class="rate-entry-body" style="display:none;">' + cropBlocks + '</div>';
+    const headEl = div.querySelector('.rate-entry-head');
+    const bodyEl = div.querySelector('.rate-entry-body');
+    headEl.addEventListener('click', function(ev) {
+      if (ev.target.tagName === 'BUTTON') return;
+      const showing = bodyEl.style.display === 'block';
+      bodyEl.style.display = showing ? 'none' : 'block';
+      div.querySelector('.rate-entry-arrow').textContent = showing ? '▾' : '▴';
+    });
     ratesCatList.appendChild(div);
   });
   ratesCatList.querySelectorAll('.maint-remove-btn').forEach(function(btn) {
@@ -3399,9 +3428,26 @@ function extractRateNumbers(text) {
     if (u === 'l' || u === 'li' || u === 'liter' || u === 'liters') return 'l';
     return u;
   }
+
+  // Priority 1: a tank rate ("30 ml/16L") PLUS a spray volume per ha ("400 li/ha") together —
+  // the ha value is total spray SOLUTION volume, not pure product. Real product total has to go
+  // through the tank ratio: product = (tank rate) × (spray volume ÷ tank size).
+  const tankMatch = text.match(/([\d.]+)\s*(kg|g|ml|l)\s*\/\s*([\d.]+)\s*(l|li|liters?)\b/i);
+  const haVolMatch = text.match(new RegExp('([\\d.]+)\\s*' + unitPattern + '\\s*\\/\\s*ha\\b', 'i'));
+  if (tankMatch && haVolMatch) {
+    return {
+      mode: 'perHaViaTank',
+      productPerTank: parseFloat(tankMatch[1]),
+      productUnit: normalizeUnit(tankMatch[2]),
+      tankSizeL: parseFloat(tankMatch[3]),
+      sprayVolumePerHa: parseFloat(haVolMatch[1]),
+      sprayVolumeUnit: normalizeUnit(haVolMatch[2])
+    };
+  }
+
   let m = text.match(new RegExp('([\\d.]+)\\s*' + unitPattern + '\\s+total area', 'i'));
   if (m) return { amount: parseFloat(m[1]), unit: normalizeUnit(m[2]), mode: 'totalArea' };
-  m = text.match(new RegExp('([\\d.]+)\\s*' + unitPattern + '\\s*\\/\\s*ha\\b', 'i'));
+  m = haVolMatch;
   if (m) return { amount: parseFloat(m[1]), unit: normalizeUnit(m[2]), mode: 'perHa' };
   m = text.match(new RegExp('([\\d.]+)\\s*' + unitPattern + '\\s*\\/\\s*hill\\b', 'i'));
   if (m) return { amount: parseFloat(m[1]), unit: normalizeUnit(m[2]), mode: 'perHill' };
@@ -3430,8 +3476,17 @@ function computeTotalUsageSummary(t) {
     const parsed = extractRateNumbers(noteText);
     if (!parsed) { groups[title].unresolved = true; groups[title].unresolvedReason = 'Rate not in a recognizable format (need "X/ha", "X/hill", or a computed total area value)'; return; }
     let amount = null;
+    let unit = parsed.unit;
     if (parsed.mode === 'totalArea') {
       amount = parsed.amount;
+    } else if (parsed.mode === 'perHaViaTank') {
+      if (totalAreaHa <= 0) { groups[title].unresolved = true; groups[title].unresolvedReason = 'Set Total Area (sqm) in Details to compute this'; return; }
+      // Spray volume needed for the whole area, in liters
+      const sprayVolumeL = parsed.sprayVolumeUnit === 'l' ? parsed.sprayVolumePerHa : parsed.sprayVolumePerHa / 1000;
+      const totalSprayVolumeL = sprayVolumeL * totalAreaHa;
+      const tanksNeeded = totalSprayVolumeL / parsed.tankSizeL;
+      amount = tanksNeeded * parsed.productPerTank;
+      unit = parsed.productUnit;
     } else if (parsed.mode === 'perHa') {
       if (totalAreaHa <= 0) { groups[title].unresolved = true; groups[title].unresolvedReason = 'Set Total Area (sqm) in Details to compute this'; return; }
       amount = parsed.amount * totalAreaHa;
@@ -3439,7 +3494,7 @@ function computeTotalUsageSummary(t) {
       if (hillsCount <= 0) { groups[title].unresolved = true; groups[title].unresolvedReason = 'Set Number of Hills in Details to compute this'; return; }
       amount = parsed.amount * hillsCount;
     }
-    groups[title].amounts[parsed.unit] = (groups[title].amounts[parsed.unit] || 0) + amount;
+    groups[title].amounts[unit] = (groups[title].amounts[unit] || 0) + amount;
   }
 
   computePlannedItems(t).forEach(function(ev) { addOccurrence(ev.title, ev.note); });
