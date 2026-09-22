@@ -83,6 +83,12 @@
   .usage-card-name { font-weight:700; font-size:0.9em; color:#1f2a1f; }
   .usage-card-total { font-size:0.95em; color:#2e5e2e; font-weight:700; margin-top:4px; }
   .usage-card-warn { font-size:0.78em; color:#a3441d; margin-top:4px; }
+  .rf-store-row { display:flex; gap:8px; align-items:center; margin-bottom:8px; }
+  .rf-store-row input[type=text] { flex:2; }
+  .rf-store-row input[type=number] { flex:1; }
+  .rf-store-row button { background:#fbe6dd; color:#a3441d; border:none; border-radius:6px; padding:8px 10px; font-size:0.8em; cursor:pointer; flex-shrink:0; }
+  .store-price-row { font-size:0.78em; color:#556; margin-top:2px; display:flex; justify-content:space-between; }
+  .store-price-row.cheapest { color:#2e5e2e; font-weight:700; }
   .plan-entry-actions { display:flex; gap:6px; flex-shrink:0; }
   .plan-entry-actions button { background:none; border:none; font-size:0.75em; font-weight:600; cursor:pointer; padding:2px 6px; }
   .maint-planned-row { display:flex; align-items:flex-start; gap:8px; padding:10px 10px 6px; border-left:4px solid transparent; }
@@ -364,6 +370,12 @@
         <input type="text" id="rf-package-label" placeholder="label, e.g. sack" style="flex:1;">
       </div>
       <div class="field-hint">e.g. 50 / kg / sack — used in the Supplies tab to show "buy X sacks" instead of raw kg.</div>
+    </div>
+    <div class="field">
+      <label>Store Prices (optional)</label>
+      <div id="rf-store-rows"></div>
+      <button type="button" class="add-btn secondary" id="rf-add-store-row-btn" style="margin-top:8px;">+ Add Store</button>
+      <div class="field-hint">Compare where to buy — the cheapest is highlighted.</div>
     </div>
     <div class="section-label">Rate per Crop</div>
     <div id="rf-crop-rows"></div>
@@ -771,7 +783,7 @@
 </div>
 
 <script>
-const APP_VERSION = '6.9';
+const APP_VERSION = '7.1';
 const STORAGE_KEY = 'trial-calendar-state-v3';
 
 // ---- Supabase cloud sync ----
@@ -1180,6 +1192,7 @@ function migrateRateEntry(e) {
   if (e.packageSize === undefined) e.packageSize = null;
   if (typeof e.packageUnit !== 'string') e.packageUnit = '';
   if (typeof e.packageLabel !== 'string') e.packageLabel = '';
+  if (!Array.isArray(e.storePrices)) e.storePrices = [];
   // Oldest format had flat rateTank/rateHa/timing fields at product level — migrate to cropRates array (unspecified crop)
   if (!e.cropRates) {
     e.cropRates = [];
@@ -2250,6 +2263,15 @@ function parseHaAmountUnit(haVal) {
   return { amount: m[1], unit: unit };
 }
 
+function parseTankAmountUnit(tankVal) {
+  if (!tankVal) return { amount: '', unit: 'ml', tankSize: '16' };
+  const m = tankVal.match(/([\d.]+)\s*(kg|g|ml|liters?|li|l)\s*\/\s*([\d.]+)\s*(l|li|liters?)\b/i);
+  if (!m) return { amount: '', unit: 'ml', tankSize: '16' };
+  let unit = m[2].toLowerCase();
+  if (unit === 'l' || unit === 'liter' || unit === 'liters') unit = 'li';
+  return { amount: m[1], unit: unit, tankSize: m[3] };
+}
+
 function addTargetRow(targetsContainer, targetVal, tankVal, haVal, timingVal, intervalVal, startDatVal, frequencyVal) {
   const isFert = rfCategory.value === 'fertilizer';
   const targetLabel = isFert ? 'Purpose / Nutrient (optional)' : 'Target Pest / Disease / Weed';
@@ -2259,9 +2281,15 @@ function addTargetRow(targetsContainer, targetVal, tankVal, haVal, timingVal, in
   const fixedIntervals = [7, 10, 14];
   const isCustomInterval = intervalVal && fixedIntervals.indexOf(intervalVal) === -1;
   const haParsed = parseHaAmountUnit(haVal);
+  const tankParsed = parseTankAmountUnit(tankVal);
   row.innerHTML = '<button type="button" class="remove-target-row-btn">Remove this target</button>' +
     '<div class="field"><label>' + targetLabel + '</label><input type="text" class="rf-target-name-input" placeholder="' + targetPlaceholder + '" value="' + (targetVal || '') + '"></div>' +
-    '<div class="field"><label>Rate per Tank</label><input type="text" class="rf-target-tank-input" placeholder="e.g. 20 ml/16L or 5 g/16L" value="' + (tankVal || '') + '"></div>' +
+    '<div class="field"><label>Rate per Tank</label><div style="display:flex; gap:8px; align-items:center;"><input type="number" class="rf-target-tank-amount" step="any" min="0" placeholder="e.g. 30" value="' + tankParsed.amount + '" style="flex:1;"><select class="rf-target-tank-unit" style="flex:1;">' +
+      '<option value="ml"' + (tankParsed.unit === 'ml' ? ' selected' : '') + '>ml</option>' +
+      '<option value="li"' + (tankParsed.unit === 'li' ? ' selected' : '') + '>li</option>' +
+      '<option value="g"' + (tankParsed.unit === 'g' ? ' selected' : '') + '>g</option>' +
+      '<option value="kg"' + (tankParsed.unit === 'kg' ? ' selected' : '') + '>kg</option>' +
+    '</select><span style="white-space:nowrap; font-size:0.85em; color:#556;">per</span><input type="number" class="rf-target-tank-size" step="any" min="0.1" placeholder="16" value="' + tankParsed.tankSize + '" style="width:60px;"><span style="font-size:0.85em; color:#556;">L</span></div><div class="field-hint">Standard knapsack tank is usually 16L.</div></div>' +
     '<div class="field"><label>Rate per ha</label><div style="display:flex; gap:8px;"><input type="number" class="rf-target-ha-amount" step="any" min="0" placeholder="e.g. 300" value="' + haParsed.amount + '" style="flex:1;"><select class="rf-target-ha-unit" style="flex:1;">' +
       '<option value="ml"' + (haParsed.unit === 'ml' ? ' selected' : '') + '>ml/ha</option>' +
       '<option value="li"' + (haParsed.unit === 'li' ? ' selected' : '') + '>li/ha</option>' +
@@ -2307,10 +2335,23 @@ function addCropRow(cropVal, targets) {
 }
 document.getElementById('rf-add-crop-row-btn').addEventListener('click', function() { addCropRow(); });
 
+function addStoreRow(storeName, price) {
+  const container = document.getElementById('rf-store-rows');
+  const row = document.createElement('div');
+  row.className = 'rf-store-row';
+  row.innerHTML = '<input type="text" class="rf-store-name-input" placeholder="e.g. Store 1" value="' + (storeName || '') + '">' +
+    '<input type="number" class="rf-store-price-input" min="0" step="any" placeholder="Price" value="' + (price !== undefined && price !== null ? price : '') + '">' +
+    '<button type="button" class="rf-remove-store-btn">✕</button>';
+  row.querySelector('.rf-remove-store-btn').addEventListener('click', function() { row.remove(); });
+  container.appendChild(row);
+}
+document.getElementById('rf-add-store-row-btn').addEventListener('click', function() { addStoreRow(); });
+
 function openRateForm(existingEntry) {
   rateFormCard.style.display = 'block';
   rfCategory.value = currentRateCat; // set category BEFORE building rows, so labels are correct
   rfCropRows.innerHTML = '';
+  document.getElementById('rf-store-rows').innerHTML = '';
   if (existingEntry) {
     editingRateId = existingEntry.id;
     document.getElementById('rf-name').value = existingEntry.name || '';
@@ -2319,6 +2360,7 @@ function openRateForm(existingEntry) {
     document.getElementById('rf-package-size').value = existingEntry.packageSize || '';
     document.getElementById('rf-package-unit').value = existingEntry.packageUnit || '';
     document.getElementById('rf-package-label').value = existingEntry.packageLabel || '';
+    (existingEntry.storePrices || []).forEach(function(sp) { addStoreRow(sp.store, sp.price); });
     (existingEntry.cropRates || []).forEach(function(cr) {
       addCropRow(cr.crop, cr.targets);
     });
@@ -2348,13 +2390,24 @@ document.getElementById('rf-save-btn').addEventListener('click', function() {
   const packageUnit = document.getElementById('rf-package-unit').value.trim();
   const packageLabel = document.getElementById('rf-package-label').value.trim();
 
+  const storePrices = [];
+  document.querySelectorAll('#rf-store-rows .rf-store-row').forEach(function(row) {
+    const store = row.querySelector('.rf-store-name-input').value.trim();
+    const priceRaw = row.querySelector('.rf-store-price-input').value.trim();
+    const price = priceRaw ? parseFloat(priceRaw) : null;
+    if (store && price !== null) storePrices.push({ store: store, price: price });
+  });
+
   const cropRates = [];
   rfCropRows.querySelectorAll('.rf-crop-row').forEach(function(block) {
     const crop = block.querySelector('.rf-crop-name-input').value.trim();
     const targets = [];
     block.querySelectorAll('.rf-target-row').forEach(function(row) {
       const target = row.querySelector('.rf-target-name-input').value.trim();
-      const tank = row.querySelector('.rf-target-tank-input').value.trim();
+      const tankAmount = row.querySelector('.rf-target-tank-amount').value.trim();
+      const tankUnit = row.querySelector('.rf-target-tank-unit').value;
+      const tankSize = row.querySelector('.rf-target-tank-size').value.trim() || '16';
+      const tank = tankAmount ? (tankAmount + ' ' + tankUnit + '/' + tankSize + 'L') : '';
       const haAmount = row.querySelector('.rf-target-ha-amount').value.trim();
       const haUnit = row.querySelector('.rf-target-ha-unit').value;
       const ha = haAmount ? (haAmount + ' ' + haUnit + '/ha') : '';
@@ -2383,9 +2436,9 @@ document.getElementById('rf-save-btn').addEventListener('click', function() {
     ['fertilizer','insecticide','herbicide','fungicide'].forEach(function(cat) {
       rateLibrary[cat] = (rateLibrary[cat] || []).filter(function(x) { return x.id !== editingRateId; });
     });
-    rateLibrary[category].push({ id: editingRateId, name: name, activeIngredient: activeIngredient, formulation: formulation, packageSize: packageSize, packageUnit: packageUnit, packageLabel: packageLabel, cropRates: cropRates });
+    rateLibrary[category].push({ id: editingRateId, name: name, activeIngredient: activeIngredient, formulation: formulation, packageSize: packageSize, packageUnit: packageUnit, packageLabel: packageLabel, storePrices: storePrices, cropRates: cropRates });
   } else {
-    rateLibrary[category].push({ id: 'r' + Date.now(), name: name, activeIngredient: activeIngredient, formulation: formulation, packageSize: packageSize, packageUnit: packageUnit, packageLabel: packageLabel, cropRates: cropRates });
+    rateLibrary[category].push({ id: 'r' + Date.now(), name: name, activeIngredient: activeIngredient, formulation: formulation, packageSize: packageSize, packageUnit: packageUnit, packageLabel: packageLabel, storePrices: storePrices, cropRates: cropRates });
   }
 
   saveRateLibrary();
@@ -2430,8 +2483,19 @@ function renderRatesList() {
       });
       cropBlocks += '<div class="rate-crop-block"><div class="rate-crop-name">' + (cr.crop || 'Unspecified crop') + '</div>' + targetRows + '</div>';
     });
+
+    let storeBlock = '';
+    if (e.storePrices && e.storePrices.length) {
+      const cheapestPrice = Math.min.apply(null, e.storePrices.map(function(sp) { return sp.price; }));
+      const sortedStores = e.storePrices.slice().sort(function(a, b) { return a.price - b.price; });
+      storeBlock = '<div class="rate-crop-block"><div class="rate-crop-name">💰 Store Prices</div>' + sortedStores.map(function(sp) {
+        const isCheapest = sp.price === cheapestPrice;
+        return '<div class="store-price-row' + (isCheapest ? ' cheapest' : '') + '"><span>' + (isCheapest ? '✓ ' : '') + sp.store + '</span><span>₱' + sp.price.toLocaleString() + '</span></div>';
+      }).join('') + '</div>';
+    }
+
     div.innerHTML = '<div class="rate-entry-head" style="cursor:pointer;"><div class="rate-entry-name">' + e.name + (e.formulation ? '<span class="rate-entry-formulation">' + e.formulation + '</span>' : '') + renderAiBadges(e.activeIngredient) + '</div><div class="rate-entry-actions"><span class="rate-entry-arrow" style="color:#aab; margin-right:4px;">▾</span><button class="rate-edit-btn" data-id="' + e.id + '">Edit</button><button class="maint-remove-btn" data-id="' + e.id + '">Remove</button></div></div>' +
-      '<div class="rate-entry-body" style="display:none;">' + cropBlocks + '</div>';
+      '<div class="rate-entry-body" style="display:none;">' + storeBlock + cropBlocks + '</div>';
     const headEl = div.querySelector('.rate-entry-head');
     const bodyEl = div.querySelector('.rate-entry-body');
     headEl.addEventListener('click', function(ev) {
