@@ -83,7 +83,9 @@
   .usage-card-name { font-weight:700; font-size:0.9em; color:#1f2a1f; }
   .usage-card-total { font-size:0.95em; color:#2e5e2e; font-weight:700; margin-top:4px; }
   .usage-card-warn { font-size:0.78em; color:#a3441d; margin-top:4px; }
-  .rf-store-row { display:flex; gap:8px; align-items:center; margin-bottom:8px; }
+  .rf-store-row, .rf-ai-row { display:flex; gap:8px; align-items:center; margin-bottom:8px; }
+  .rf-ai-row input[type=text] { flex:1; }
+  .rf-ai-row button { background:#fbe6dd; color:#a3441d; border:none; border-radius:6px; padding:8px 10px; font-size:0.8em; cursor:pointer; flex-shrink:0; }
   .rf-store-row input[type=text] { flex:2; }
   .rf-store-row input[type=number] { flex:1; }
   .rf-store-row button { background:#fbe6dd; color:#a3441d; border:none; border-radius:6px; padding:8px 10px; font-size:0.8em; cursor:pointer; flex-shrink:0; }
@@ -354,9 +356,9 @@
       <input type="text" id="rf-name" placeholder="e.g. Incipio">
     </div>
     <div class="field">
-      <label>Active Ingredient (AI)</label>
-      <input type="text" id="rf-ai" placeholder="e.g. Chlorantraniliprole 5% + Thiamethoxam 20%">
-      <div class="field-hint">Separate multiple AIs with a "+" — each will show as its own tag.</div>
+      <label>Active Ingredient(s)</label>
+      <div id="rf-ai-rows"></div>
+      <button type="button" class="add-btn secondary" id="rf-add-ai-row-btn" style="margin-top:8px;">+ Add AI</button>
     </div>
     <div class="field">
       <label>Formulation</label>
@@ -783,7 +785,7 @@
 </div>
 
 <script>
-const APP_VERSION = '7.1';
+const APP_VERSION = '7.2';
 const STORAGE_KEY = 'trial-calendar-state-v3';
 
 // ---- Supabase cloud sync ----
@@ -1188,6 +1190,22 @@ let rateLibrary = { fertilizer: [], insecticide: [], herbicide: [], fungicide: [
 
 function migrateRateEntry(e) {
   if (typeof e.activeIngredient !== 'string') e.activeIngredient = '';
+  if (!Array.isArray(e.activeIngredients)) {
+    e.activeIngredients = [];
+    if (e.activeIngredient) {
+      e.activeIngredient.split('+').forEach(function(part) {
+        part = part.trim();
+        if (!part) return;
+        const m = part.match(/^(.*?)\s*([\d.]+\s*(?:%|g|kg|ml|li|l)?)$/i);
+        if (m && m[2]) {
+          e.activeIngredients.push({ name: m[1].trim(), concentration: m[2].trim() });
+        } else {
+          e.activeIngredients.push({ name: part, concentration: '' });
+        }
+      });
+    }
+  }
+  delete e.activeIngredient;
   if (typeof e.formulation !== 'string') e.formulation = '';
   if (e.packageSize === undefined) e.packageSize = null;
   if (typeof e.packageUnit !== 'string') e.packageUnit = '';
@@ -2335,6 +2353,18 @@ function addCropRow(cropVal, targets) {
 }
 document.getElementById('rf-add-crop-row-btn').addEventListener('click', function() { addCropRow(); });
 
+function addAiRow(aiName, aiConcentration) {
+  const container = document.getElementById('rf-ai-rows');
+  const row = document.createElement('div');
+  row.className = 'rf-ai-row';
+  row.innerHTML = '<input type="text" class="rf-ai-name-input" placeholder="e.g. Chlorantraniliprole" value="' + (aiName || '') + '">' +
+    '<input type="text" class="rf-ai-conc-input" placeholder="e.g. 20g" value="' + (aiConcentration || '') + '" style="max-width:100px;">' +
+    '<button type="button" class="rf-remove-ai-btn">✕</button>';
+  row.querySelector('.rf-remove-ai-btn').addEventListener('click', function() { row.remove(); });
+  container.appendChild(row);
+}
+document.getElementById('rf-add-ai-row-btn').addEventListener('click', function() { addAiRow(); });
+
 function addStoreRow(storeName, price) {
   const container = document.getElementById('rf-store-rows');
   const row = document.createElement('div');
@@ -2352,10 +2382,11 @@ function openRateForm(existingEntry) {
   rfCategory.value = currentRateCat; // set category BEFORE building rows, so labels are correct
   rfCropRows.innerHTML = '';
   document.getElementById('rf-store-rows').innerHTML = '';
+  document.getElementById('rf-ai-rows').innerHTML = '';
   if (existingEntry) {
     editingRateId = existingEntry.id;
     document.getElementById('rf-name').value = existingEntry.name || '';
-    document.getElementById('rf-ai').value = existingEntry.activeIngredient || '';
+    (existingEntry.activeIngredients || []).forEach(function(ai) { addAiRow(ai.name, ai.concentration); });
     document.getElementById('rf-formulation').value = existingEntry.formulation || '';
     document.getElementById('rf-package-size').value = existingEntry.packageSize || '';
     document.getElementById('rf-package-unit').value = existingEntry.packageUnit || '';
@@ -2368,7 +2399,6 @@ function openRateForm(existingEntry) {
   } else {
     editingRateId = null;
     document.getElementById('rf-name').value = '';
-    document.getElementById('rf-ai').value = '';
     document.getElementById('rf-formulation').value = '';
     document.getElementById('rf-package-size').value = '';
     document.getElementById('rf-package-unit').value = '';
@@ -2383,7 +2413,12 @@ document.getElementById('rf-save-btn').addEventListener('click', function() {
   const category = rfCategory.value;
   const name = document.getElementById('rf-name').value.trim();
   if (!name) { alert('Enter a product name first.'); return; }
-  const activeIngredient = document.getElementById('rf-ai').value.trim();
+  const activeIngredients = [];
+  document.querySelectorAll('#rf-ai-rows .rf-ai-row').forEach(function(row) {
+    const aiName = row.querySelector('.rf-ai-name-input').value.trim();
+    const aiConc = row.querySelector('.rf-ai-conc-input').value.trim();
+    if (aiName) activeIngredients.push({ name: aiName, concentration: aiConc });
+  });
   const formulation = document.getElementById('rf-formulation').value.trim();
   const packageSizeRaw = document.getElementById('rf-package-size').value.trim();
   const packageSize = packageSizeRaw ? parseFloat(packageSizeRaw) : null;
@@ -2436,9 +2471,9 @@ document.getElementById('rf-save-btn').addEventListener('click', function() {
     ['fertilizer','insecticide','herbicide','fungicide'].forEach(function(cat) {
       rateLibrary[cat] = (rateLibrary[cat] || []).filter(function(x) { return x.id !== editingRateId; });
     });
-    rateLibrary[category].push({ id: editingRateId, name: name, activeIngredient: activeIngredient, formulation: formulation, packageSize: packageSize, packageUnit: packageUnit, packageLabel: packageLabel, storePrices: storePrices, cropRates: cropRates });
+    rateLibrary[category].push({ id: editingRateId, name: name, activeIngredients: activeIngredients, formulation: formulation, packageSize: packageSize, packageUnit: packageUnit, packageLabel: packageLabel, storePrices: storePrices, cropRates: cropRates });
   } else {
-    rateLibrary[category].push({ id: 'r' + Date.now(), name: name, activeIngredient: activeIngredient, formulation: formulation, packageSize: packageSize, packageUnit: packageUnit, packageLabel: packageLabel, storePrices: storePrices, cropRates: cropRates });
+    rateLibrary[category].push({ id: 'r' + Date.now(), name: name, activeIngredients: activeIngredients, formulation: formulation, packageSize: packageSize, packageUnit: packageUnit, packageLabel: packageLabel, storePrices: storePrices, cropRates: cropRates });
   }
 
   saveRateLibrary();
@@ -2449,12 +2484,20 @@ document.getElementById('rf-save-btn').addEventListener('click', function() {
   renderRatesList();
 });
 
-function renderAiBadges(aiString) {
-  if (!aiString) return '';
-  return aiString.split('+').map(function(part) {
-    part = part.trim();
-    return part ? '<span class="rate-entry-ai">' + part + '</span>' : '';
+function renderAiBadges(activeIngredients) {
+  if (!activeIngredients || !activeIngredients.length) return '';
+  return activeIngredients.map(function(ai) {
+    const text = ai.concentration ? (ai.name + ' ' + ai.concentration) : ai.name;
+    return text.trim() ? '<span class="rate-entry-ai">' + text + '</span>' : '';
   }).join('');
+}
+
+// Joined display string for an AI array, used anywhere a plain-text summary is needed (notes, schedule items)
+function aiDisplayString(activeIngredients) {
+  if (!activeIngredients || !activeIngredients.length) return '';
+  return activeIngredients.map(function(ai) {
+    return ai.concentration ? (ai.name + ' ' + ai.concentration) : ai.name;
+  }).join(' + ');
 }
 
 function renderRatesList() {
@@ -2494,7 +2537,7 @@ function renderRatesList() {
       }).join('') + '</div>';
     }
 
-    div.innerHTML = '<div class="rate-entry-head" style="cursor:pointer;"><div class="rate-entry-name">' + e.name + (e.formulation ? '<span class="rate-entry-formulation">' + e.formulation + '</span>' : '') + renderAiBadges(e.activeIngredient) + '</div><div class="rate-entry-actions"><span class="rate-entry-arrow" style="color:#aab; margin-right:4px;">▾</span><button class="rate-edit-btn" data-id="' + e.id + '">Edit</button><button class="maint-remove-btn" data-id="' + e.id + '">Remove</button></div></div>' +
+    div.innerHTML = '<div class="rate-entry-head" style="cursor:pointer;"><div class="rate-entry-name">' + e.name + (e.formulation ? '<span class="rate-entry-formulation">' + e.formulation + '</span>' : '') + renderAiBadges(e.activeIngredients) + '</div><div class="rate-entry-actions"><span class="rate-entry-arrow" style="color:#aab; margin-right:4px;">▾</span><button class="rate-edit-btn" data-id="' + e.id + '">Edit</button><button class="maint-remove-btn" data-id="' + e.id + '">Remove</button></div></div>' +
       '<div class="rate-entry-body" style="display:none;">' + storeBlock + cropBlocks + '</div>';
     const headEl = div.querySelector('.rate-entry-head');
     const bodyEl = div.querySelector('.rate-entry-body');
@@ -3050,7 +3093,7 @@ function applyTargetToAddItemForm(product, target, t) {
   document.getElementById('ma-name').value = product.name;
   let notesParts = [];
   if (product.formulation) notesParts.push(product.formulation);
-  if (product.activeIngredient) notesParts.push(product.activeIngredient);
+  if (product.activeIngredients && product.activeIngredients.length) notesParts.push(aiDisplayString(product.activeIngredients));
   if (target) {
     const bits = [];
     if (target.target) bits.push(target.target);
@@ -3422,7 +3465,7 @@ document.getElementById('apply-preset-confirm-btn').addEventListener('click', fu
     const cropRate = product ? findCropRateForProduct(product, t.details.crop) : null;
     let noteParts = [];
     if (product && product.formulation) noteParts.push(product.formulation);
-    if (product && product.activeIngredient) noteParts.push(product.activeIngredient);
+    if (product && product.activeIngredients && product.activeIngredients.length) noteParts.push(aiDisplayString(product.activeIngredients));
     if (cropRate && cropRate.targets && cropRate.targets.length) {
       cropRate.targets.forEach(function(tg) {
         const bits = [];
@@ -3680,7 +3723,7 @@ function renderMaintenance() {
             productPickerHtml = '<div class="field" style="margin-top:6px;"><select class="maint-product-select">' + optionsHtml + '</select></div>';
             if (selectedProduct) {
               let rateNote = selectedProduct.name;
-              if (selectedProduct.activeIngredient) rateNote += ' (' + selectedProduct.activeIngredient + ')';
+              if (selectedProduct.activeIngredients && selectedProduct.activeIngredients.length) rateNote += ' (' + aiDisplayString(selectedProduct.activeIngredients) + ')';
               if (matchedTarget) {
                 rateNote += ' — ' + (matchedTarget.target ? matchedTarget.target + ': ' : '');
                 if (matchedTarget.tank) rateNote += matchedTarget.tank;
@@ -3742,7 +3785,7 @@ function renderMaintenance() {
             slotPickerHtml = '<div class="field" style="margin-top:6px;"><select class="maint-slot-product-select">' + optionsHtml + '</select></div>';
             if (selectedProduct) {
               let rateNote = selectedProduct.name;
-              if (selectedProduct.activeIngredient) rateNote += ' (' + selectedProduct.activeIngredient + ')';
+              if (selectedProduct.activeIngredients && selectedProduct.activeIngredients.length) rateNote += ' (' + aiDisplayString(selectedProduct.activeIngredients) + ')';
               if (matchedTarget) {
                 rateNote += ' — ' + (matchedTarget.target ? matchedTarget.target + ': ' : '');
                 if (matchedTarget.tank) rateNote += matchedTarget.tank;
